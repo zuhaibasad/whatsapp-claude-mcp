@@ -1,5 +1,5 @@
 # wa-bridge settings.
-# Keys use snake_case. Restart the daemon after you change this file.
+# Keys use snake_case. Changes are picked up automatically within about a minute.
 
 # How many days of messages to keep in the local store. Older messages are deleted.
 # Whole number, 1 or more.
