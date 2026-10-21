@@ -1,0 +1,35 @@
+# wa-bridge settings.
+# Keys use snake_case. Restart the daemon after you change this file.
+
+# How many days of messages to keep in the local store. Older messages are deleted.
+# Whole number, 1 or more.
+retention_days: 30
+
+# Time zone used for dates, e.g. Asia/Karachi or Europe/London.
+# Leave empty to use this computer's time zone.
+timezone: ""
+
+# Read messages from group chats?
+include_groups: true
+
+# Read messages from one-to-one (direct) chats?
+include_direct_chats: false
+
+# Chats to include even when their type is switched off above.
+# Each entry is a chat name or a chat id. Names are matched case-insensitively. Example:
+#   allowlist:
+#     - "Project Team"
+allowlist: []
+
+# Chats to always skip. Each entry is a chat name or a chat id, same as allowlist.
+# The denylist wins: a chat on both lists is skipped.
+denylist: []
+
+# Your names and nicknames, e.g. Zuhaib, Zuhaib bhai, ZA, for mention detection in text.
+my_names: []
+
+# Longest message text kept. Longer text is cut short.
+max_text_chars: 2000
+
+# How much the daemon writes to its log: error, warn, info or debug.
+log_level: info

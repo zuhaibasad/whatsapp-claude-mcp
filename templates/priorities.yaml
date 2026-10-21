@@ -1,0 +1,17 @@
+# Guidance for Claude, not strict rules.
+# Plain descriptions of how urgent a message is. English, Roman Urdu and mixed examples are fine.
+
+critical:
+  - "System or service is down, nothing works (e.g. 'ERP down hai, koi login nahi ho raha')"
+  - "Payment or money issue (e.g. 'client ne payment double kar di, refund chahiye')"
+  - "Client complaint (e.g. 'client bahut naraz hai, escalate karna hai')"
+  - "Deadline is today (e.g. 'aaj 5 baje tak report bhejni hai')"
+  - "Security incident (e.g. 'suspicious login attempt aaya hai')"
+
+high:
+  - "Important request with a deadline this week"
+  - "A teammate is blocked and waiting on me (e.g. 'bhai aap ka reply aaye to kaam aage barhega')"
+
+low:
+  - "General updates, FYI messages and thanks (e.g. 'meeting notes share kar diye hain')"
+  - "Social chat and jokes"

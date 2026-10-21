@@ -1,0 +1,34 @@
+# Guidance for Claude, not strict rules.
+# Claude uses these to decide which department a message is about.
+# Keywords are words that often appear in that department's messages.
+# Examples show the kind of message that belongs there. English, Roman Urdu and mixed are all fine.
+
+- name: ERP
+  keywords: [erp, invoice, purchase order, inventory, stock]
+  examples:
+    - "ERP mein invoice post nahi ho raha, urgent check karein"
+    - "Stock report ERP mein update nahi hui, please dekh lein"
+
+- name: IT
+  keywords: [vpn, password, laptop, server, network]
+  examples:
+    - "VPN connect nahi ho raha, koi restart kar sakta hai?"
+    - "Mera laptop ka password reset karna hai, ticket kahan raise karun"
+
+- name: Finance
+  keywords: [payment, salary, bank, reimbursement, budget]
+  examples:
+    - "Client ki payment abhi tak nahi aayi, finance se confirm karein"
+    - "Reimbursement ka form submit kar diya hai, approval kab tak hogi?"
+
+- name: Sales
+  keywords: [quote, deal, lead, discount, demo]
+  examples:
+    - "Is client ko quote aaj bhejna hai, discount approval chahiye"
+    - "New lead ka follow-up karna hai, demo kab schedule kar sakte hain?"
+
+- name: Ops
+  keywords: [delivery, shipment, dispatch, vendor, warehouse]
+  examples:
+    - "Warehouse se dispatch late ho raha hai, vendor ko call karein"
+    - "Shipment ka tracking update nahi mili, kal tak deliver hona tha"
