@@ -2,6 +2,15 @@
 
 Newest first. Each entry: date, decision, reason, alternatives.
 
+## 2026-10-21 — Phase 1 implementation decisions
+- **Data location:** one `.wa-bridge/` per project folder (the brief's default). The keychain entry is per project path (`project-<sha256 prefix>`).
+- **Baileys logger capped at `warn`.** Baileys' debug/trace output can contain raw frames, and our own logs carry ids and event names only.
+- **Excluded chats are never stored.** Only a chat row with `included=0` is kept, so you can see the chat and switch it on. An existing chat keeps its `included` flag until `config.yaml` changes; the daemon re-applies the filter within about 30 s.
+- **Deleted messages lose their text** (`text=NULL`) and drop out of search.
+- **Daemon stops instead of looping** on `logged_out`, `forbidden`, `replaced`, `bad_session`, or when WhatsApp asks for a new QR. Only `link` ever shows a QR.
+- **`init --accept`** works only with env `WA_BRIDGE_ACCEPT_RISK="I accept"`, so a script or agent cannot skip the warning by accident.
+- **Built with agents:** an orchestrator (Opus) plus Sonnet/Haiku workers in git worktrees. The protocol is in `docs/AGENTS.md` and the task specs in `docs/tasks/`.
+
 ## 2026-10-21 — `unlink` may call `logout()` (approved by user)
 - **Decision:** `logout()` is the only write call to WhatsApp that is allowed. It runs only from `wa-bridge unlink`, after you type a confirmation. The read-only guard allowlists it by name, and every other send-type API still fails the build.
 - **Why:** it removes the device from *Linked devices* on the phone, as the brief asks. It ends the session and sends no message, receipt or presence update.
