@@ -283,7 +283,8 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
       const created = factory({
         ...READ_ONLY_SOCKET_CONFIG,
         auth: auth.state,
-        logger,
+        // Baileys debug/trace logs can contain raw frames; cap at warn so message content never reaches the log.
+        logger: logger.child({ class: 'baileys' }, { level: 'warn' }),
         browser: opts.browser ?? defaultBrowser(),
         getMessage: opts.getMessage ?? (async () => undefined),
         ...(version ? { version } : {}),
