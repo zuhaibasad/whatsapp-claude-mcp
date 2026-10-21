@@ -1,0 +1,5 @@
+// @file src/daemon/wa/media.ts
+// @expect download-media-import
+import { downloadMediaMessage as dl } from 'baileys';
+
+export const fetchMedia = dl;

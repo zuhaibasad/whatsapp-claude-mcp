@@ -1,0 +1,8 @@
+// @file src/cli/commands.ts
+// @expect logout-outside-unlink
+declare const sock: Record<string, () => Promise<void>>;
+
+// Wrong file: even a function named unlink may not call logout outside wa-client.ts.
+export async function unlink(): Promise<void> {
+  await sock.logout();
+}

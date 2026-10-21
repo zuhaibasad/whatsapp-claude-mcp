@@ -1,0 +1,15 @@
+// @file src/daemon/wa/wa-client.ts
+declare const sock: Record<string, () => Promise<void>>;
+
+export class WaClient {
+  async unlink(): Promise<void> {
+    await sock.logout();
+  }
+}
+
+export async function unlink(): Promise<void> {
+  const inner = async (): Promise<void> => {
+    await sock.logout();
+  };
+  await inner();
+}

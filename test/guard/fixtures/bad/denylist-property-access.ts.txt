@@ -1,0 +1,8 @@
+// @file src/daemon/handler.ts
+// @expect denylist-api
+declare const sock: { sendMessage(jid: string, c: unknown): Promise<void>; readMessages(k: unknown[]): Promise<void> };
+
+export async function reply(): Promise<void> {
+  await sock.sendMessage('1@s.whatsapp.net', { text: 'hi' });
+  await sock.readMessages([]);
+}

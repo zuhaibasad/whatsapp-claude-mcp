@@ -1,0 +1,13 @@
+// @file src/daemon/wa/wa-client.ts
+import makeWASocket, { DisconnectReason, jidNormalizedUser } from 'baileys';
+
+const sock = makeWASocket({ markOnlineOnConnect: false, syncFullHistory: false });
+
+export async function readOnly(jid: string): Promise<unknown[]> {
+  sock.ev.on('messages.upsert', () => undefined);
+  const meta = await sock.groupMetadata(jid);
+  const all = await sock.groupFetchAllParticipating();
+  const known = await sock.onWhatsApp(jid);
+  const status = await sock['fetchStatus'](jid);
+  return [meta, all, known, status, DisconnectReason, jidNormalizedUser(jid)];
+}

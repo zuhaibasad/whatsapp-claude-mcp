@@ -1,0 +1,10 @@
+// @file src/mcp/server.ts
+// @expect baileys-import-outside-wa
+import makeWASocket from 'baileys';
+import { jidNormalizedUser } from '@whiskeysockets/baileys/lib/WABinary';
+
+export async function later(name: string): Promise<unknown> {
+  const m = await import('baileys');
+  const n = await import(name);
+  return [makeWASocket, jidNormalizedUser, m, n];
+}

@@ -1,0 +1,10 @@
+// @file src/daemon/handler.ts
+// @expect socket-spread
+declare const sock: Record<string, unknown>;
+
+export function leak(): unknown[] {
+  const copy = { ...sock };
+  const { ev, ...rest } = sock;
+  for (const k in sock) void k;
+  return [copy, ev, rest, Object.keys(sock), Object.entries(sock)];
+}
