@@ -21,6 +21,6 @@ The folder `C:/tempfolder/wa-bridge/.agents/` is shared by every worktree (use t
 - `BOARD.md` is append-only. One line per post: `[<ISO time>] <from> -> <to|ALL>: <TYPE> <text>`
   TYPE is one of `START`, `DONE`, `NEED` (you need something from someone), `INFO` (a fact others should know, e.g. an API you exported), `ANSWER`.
 - `inbox/<task-id>.md` holds messages to you. **Check your inbox when you start, before each major step, and before finishing.**
-- `notes/<task-id>.md` holds your public API and gotchas as soon as they are stable, so dependent tasks can read them.
+- **Notes:** commit your public API and gotchas to `docs/notes/<task-id>.md` in your branch (worktree agents cannot write files outside their worktree with the Write tool, though appending to BOARD.md and inbox files from the shell works). Earlier notes are mirrored in `.agents/notes/`.
 - Post `START` when you begin and `DONE` when finished. If you are blocked, post a `NEED`, choose the most reasonable assumption, keep going, and list it in your final reply. Never wait idle.
 - The orchestrator may also message you directly. Treat those messages like inbox messages.
