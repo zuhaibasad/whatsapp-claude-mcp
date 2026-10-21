@@ -1,0 +1,8 @@
+// @file src/daemon/handler.ts
+// @expect dynamic-socket-access
+declare const sock: Record<string, (...a: unknown[]) => Promise<void>>;
+
+export async function dynamic(x: string): Promise<void> {
+  await sock[x]();
+  await sock['send' + 'Message']();
+}

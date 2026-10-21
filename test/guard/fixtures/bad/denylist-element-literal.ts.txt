@@ -1,0 +1,8 @@
+// @file src/daemon/handler.ts
+// @expect denylist-api
+declare const sock: Record<string, (...a: unknown[]) => Promise<void>>;
+
+export async function sneaky(): Promise<void> {
+  await sock['sendMessage']('1@s.whatsapp.net', {});
+  await sock[`chatModify`]({});
+}

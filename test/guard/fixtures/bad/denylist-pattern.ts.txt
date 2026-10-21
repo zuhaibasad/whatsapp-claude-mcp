@@ -1,0 +1,13 @@
+// @file src/daemon/handler.ts
+// @expect denylist-api
+declare const sock: Record<string, (...a: unknown[]) => Promise<void>>;
+
+export async function patterns(): Promise<void> {
+  await sock.groupUpdateSubject('g', 'x');
+  await sock.updateLastSeenPrivacy('none');
+  await sock.newsletterFollow('n');
+  await sock.groupInviteCode('g');
+  await sock.updateProfileName('me');
+  await sock.addLabel('l');
+  await sock.communityCreate('s', 'b');
+}

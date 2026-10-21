@@ -1,0 +1,16 @@
+// @file src/daemon/wa/wa-client.ts
+// @expect logout-outside-unlink
+declare const sock: Record<string, () => Promise<void>>;
+
+export async function unlink(): Promise<void> {
+  await sock.logout();
+}
+
+// Right file, wrong function.
+export async function disconnect(): Promise<void> {
+  await sock.logout();
+}
+
+export async function viaElement(): Promise<void> {
+  await sock['logout']();
+}

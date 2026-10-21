@@ -1,0 +1,9 @@
+// @file src/daemon/handler.ts
+// @expect denylist-api
+declare const sock: Record<string, (...a: unknown[]) => Promise<void>>;
+
+export function grab(): void {
+  const { readMessages, sendPresenceUpdate: presence } = sock;
+  void readMessages;
+  void presence;
+}

@@ -1,0 +1,13 @@
+// @file src/store/messages.ts
+import { unlink } from 'node:fs/promises';
+
+interface Row { starred: boolean; sentMessageCount: number }
+
+export async function cleanup(path: string, rows: Row[], cfg: Record<string, string>, key: string): Promise<unknown> {
+  await unlink(path);
+  const starred = rows.filter((r) => r.starred);
+  const copy = { ...cfg };
+  const value = cfg[key];
+  const sendTo = 'inbox';
+  return [starred, copy, value, sendTo, Object.keys(cfg)];
+}
