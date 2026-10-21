@@ -1,0 +1,8 @@
+node_modules/
+dist/
+coverage/
+.wa-bridge/
+.agents/
+*.log
+qr.png
+.claude/worktrees/
