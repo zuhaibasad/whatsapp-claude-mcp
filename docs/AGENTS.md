@@ -24,3 +24,8 @@ The folder `C:/tempfolder/wa-bridge/.agents/` is shared by every worktree (use t
 - **Notes:** commit your public API and gotchas to `docs/notes/<task-id>.md` in your branch (worktree agents cannot write files outside their worktree with the Write tool, though appending to BOARD.md and inbox files from the shell works). Earlier notes are mirrored in `.agents/notes/`.
 - Post `START` when you begin and `DONE` when finished. If you are blocked, post a `NEED`, choose the most reasonable assumption, keep going, and list it in your final reply. Never wait idle.
 - The orchestrator may also message you directly. Treat those messages like inbox messages.
+
+## Lessons from wave 1 (read these)
+- The guard (`test/guard/`) rejects **any identifier or string** that matches a WhatsApp write API name, even in your own types or variables. For example: `star`, `sendMessage`, `readMessages`, `logout` outside `unlink`. Pick other names.
+- Worktree shell: run single commands, not long `&&` chains, if the sandbox refuses compound commands.
+- Notes from wave 1 are in `C:/tempfolder/wa-bridge/.agents/notes/T1..T6.md`. Read them; they describe the real APIs.

@@ -24,7 +24,7 @@ Global option `--project <dir>` (default cwd) → `resolvePaths`. `--json` on re
   1. Explains it will log out the linked device from WhatsApp and delete the local session (and all local data unless `--keep-data`).
   2. Requires typing `unlink`.
   3. Requires the daemon to be stopped (or stops it).
-  4. Opens the auth DB → a client → `unlink()` (calls logout). If WhatsApp can't be reached, still wipe locally and tell the user to remove the device on the phone manually.
+  4. Opens the auth DB → a client → `connect()` → **wait for the `open` connection event (timeout 30 s)** → `unlink()` (calls logout; T6 requires an open socket). If WhatsApp can't be reached, still wipe locally and tell the user to remove the device on the phone manually.
   5. Deletes `auth.db` (and `store.db`, config, exports unless `--keep-data`), removes the keychain key unless `--keep-data`.
   6. Prints a summary.
 - Durations: parse `30d`, `12h`, `90m`, or an ISO timestamp. Put this in `src/cli/duration.ts`, tested.
