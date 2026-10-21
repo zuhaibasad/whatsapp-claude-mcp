@@ -44,13 +44,11 @@ export interface CliDeps {
   unlinkOpenTimeoutMs: number;
 }
 
-// Literal specifier (the guard forbids non-literal import()). The file is added by T7; until it is merged
-// tsc cannot resolve it, hence @ts-ignore (not @ts-expect-error, which would fail once it exists).
+// Loaded lazily so read-only commands (status, chats, search) never load the WhatsApp library.
+// The annotation makes tsc check that the real module satisfies DaemonModule.
 let cached: Promise<DaemonModule> | undefined;
 function daemonModule(): Promise<DaemonModule> {
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-  // @ts-ignore module created by T7
-  cached ??= import('../daemon/index.js') as Promise<DaemonModule>;
+  cached ??= import('../daemon/index.js').then((m): DaemonModule => m);
   return cached;
 }
 

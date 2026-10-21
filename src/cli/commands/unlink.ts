@@ -117,7 +117,9 @@ export async function unlinkCommand(opts: UnlinkOpts, io: Io, deps: CliDeps): Pr
   io.out(`  Keychain key removed:     ${keep ? 'no (kept)' : 'yes'}`);
   if (!remoteDone) {
     if (note) io.out(`  Note: ${note}`);
-    io.out('  Remove the device manually: WhatsApp -> Settings -> Linked devices -> select this device -> Log out.');
+    if (note !== 'No linked session was stored.') {
+      io.out('  Remove the device manually: WhatsApp -> Settings -> Linked devices -> select this device -> Log out.');
+    }
   }
   return 0;
 }
