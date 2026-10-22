@@ -35,7 +35,7 @@ describe('read tools', () => {
     expect(r.json.since).toBe('last_review');
     expect(r.json.truncated).toBe(false);
     const ms = r.json.chats[0].messages;
-    expect(ms[0]).toMatchObject({ ref: `${G1}/a`, from: 'Ali', reply_to: `${G1}/q1`, mentions_me: true, media: 'image', edited: false, deleted: false });
+    expect(ms[0]).toMatchObject({ ref: `${G1}/a`, from: 'Ali', reply_to: { ref: `${G1}/q1`, from: null, text: null }, mentions_me: true, media: 'image', edited: false, deleted: false });
     expect([...ms[0].text].length).toBeLessThan(2100);
     expect(ms[0].text).toContain('[truncated]');
     expect(ms[1]).toMatchObject({ deleted: true, text: null });

@@ -149,6 +149,8 @@ export interface Store {
   getMessage(chatId: string, messageId: string): StoredMessage | null;
 
   getMessages(q: MessageQuery): StoredMessage[];
+  /** Up to n messages of the chat with ts < beforeTs (deleted ones skipped), oldest first. */
+  getMessagesBefore(chatId: string, beforeTs: number, n: number): StoredMessage[];
   /** since = 'last_review' uses each chat's reviewed_until (0 if never). Only included chats. */
   getNewMessages(q: { since: number | 'last_review'; chatIds?: string[]; limit: number }): NewMessagesResult;
   /** query is user text; implementation must escape it for FTS5 (never throw on odd input). */

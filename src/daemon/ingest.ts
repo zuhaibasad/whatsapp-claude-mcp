@@ -149,6 +149,7 @@ export class Ingestor {
         ...raw,
         text,
         senderName: raw.senderName ?? this.contactName(raw.senderId),
+        quotedSenderName: raw.quotedSenderName ?? (raw.quotedSenderId ? this.contactName(raw.quotedSenderId) : null),
         mentionReason,
       });
       if (inserted) this.counters.ingested++;
