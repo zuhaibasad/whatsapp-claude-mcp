@@ -123,3 +123,37 @@ The prototype HTML is a stub (CDN import placeholder); the real build must inlin
 - Maturity: ext-apps 2.0.x, spec 2026-01-26; Claude-specific behaviour is documented only on one troubleshooting page and may change. Pin and re-test on Desktop updates.
 - No documented HTML size limit; inlined SDK ~100-200 KB should be fine.
 - App-only tools appear in raw `tools/list`, so other clients or a host ignoring visibility can call them.
+
+## 9. Claude Code (CLI, VS Code extension, desktop app Code tab) - scope update
+- Claude Code does NOT render `ui://` panels as of Oct 2026 (per Claude's MCP Apps quickstart: Claude Code calls the tool and returns text; open feature request https://github.com/anthropics/claude-code/issues/95149 "Render MCP Apps ui:// resources in Claude Code", no committed plan found; not in the MCP client matrix/support list https://modelcontextprotocol.io/extensions/client-matrix). Same engine for terminal and VS Code extension.
+- What it shows: the tool's normal `content` text only; `_meta.ui` and `structuredContent` are ignored. Claude Code also does not advertise the `io.modelcontextprotocol/ui` client extension, so the server can detect this from client capabilities and branch.
+- Consequences: (a) tools that exist only as UI entry points must return a useful text result with the fallback instruction/URL; (b) app-only tools are not hidden or callable by anything in Claude Code: they appear in the model's tool list if Claude Code ignores `visibility` (assume it does). So app-only tools must be safe when called by the model (nonce/state checks; section 6) or, better, be omitted from `tools/list` when the client did not advertise UI support (per-session capability check at connect time). Re-verify at build time, since #95149 may land.
+
+## 10. One UI, two hosts: Desktop panel and localhost page
+Design confirmed as feasible, with these differences:
+| Concern | Desktop MCP App | Claude Code (localhost page) |
+|---|---|---|
+| Delivery | `resources/read` of `ui://` | local HTTP service serves `/setup?token=...` (bind 127.0.0.1 only) |
+| Transport | postMessage JSON-RPC via `App.callServerTool` | `fetch('/api/<op>', {headers:{Authorization:'Bearer '+token}})` |
+| Initial data | `app.ontoolresult` | `GET /api/state` on load |
+| CSP | host-imposed, `connect-src 'none'`: fetch to localhost is BLOCKED | your own response header; allow `connect-src 'self'` |
+| Auth of user action | nonce embedded in HTML per read (section 6) | one-time token in URL, exchanged for HttpOnly/SameSite=Strict cookie, plus Host/Origin header checks (DNS-rebinding) and CSRF token on POST |
+| Model context after Save | `updateModelContext` / `sendMessage` | none; the user types "done" in chat, or the model polls a status tool |
+| Open | host shows panel | tool returns text with the URL; model tells user to open it (optionally service calls OS `start` to open browser) |
+Key point: in Desktop the iframe cannot reach 127.0.0.1 (CSP connect-src 'none' unless you declare `csp.connectDomains: ['http://127.0.0.1:PORT']`, which Claude may or may not honor and which also requires CORS and exposes the service to the iframe origin). Do NOT rely on it; use the postMessage path in Desktop so the host proxies calls to the stdio MCP server.
+
+Thin adapter (same UI code, two implementations selected at startup):
+```ts
+interface Host {
+  init(): Promise<State>;                         // initial state
+  call(op: 'status'|'qr'|'listChats'|'acceptRisk'|'save', args?: unknown): Promise<any>;
+  notifyDone?(summary: string): Promise<void>;    // best-effort
+  capabilities: { pushContext: boolean };
+}
+// mcpAppHost: app = new App(...); await app.connect(); call = (op,a)=>app.callServerTool({name:'app_'+op,arguments:a}).then(r=>r.structuredContent)
+//   notifyDone = s=>app.updateModelContext({content:[{type:'text',text:s}]})
+// httpHost:   call = (op,a)=>fetch('/api/'+op,{method:'POST',headers:{'content-type':'application/json','x-csrf':csrf},body:JSON.stringify(a)}).then(r=>r.json())
+// selection: const host = window.__WA_HTTP__ /* injected by the HTTP route */ ? httpHost() : mcpAppHost();
+```
+Server side: implement each op once as a plain function (`ops.ts`), then expose it twice: as app-only MCP tool (`structuredContent`) and as an HTTP route (JSON). Build the UI once to a single HTML; the HTTP route injects `window.__WA_HTTP__={csrf}` into a copy, while the `ui://` resource serves it with the nonce meta. Avoid the SDK import in the HTTP path by lazy-loading (`await import` inside mcpAppHost) or bundle both (extra ~100 KB is acceptable).
+Caveats: the same acceptance, QR and selection logic gets two auth models, so test both; the localhost service must never be reachable by the model without the token (token only shown to the user by the model relaying the URL is itself visible to the model, which is acceptable only because the page additionally needs the user's click plus CSRF/cookie; for the risk-accept step prefer the CLI `accept-risk` or require a typed phrase echoed from the page that the model cannot see). A browser tab, unlike the chat panel, cannot update the model context, so keep a status tool the model can call after the user says they finished.
