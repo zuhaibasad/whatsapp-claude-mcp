@@ -320,6 +320,8 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
   client.on('chats', (c) => { touchSync(); guarded('chats', () => ingestor.onChats(c)); });
   client.on('groups', (g) => { touchSync(); guarded('groups', () => ingestor.onGroups(g)); });
   client.on('contacts', (c) => { touchSync(); guarded('contacts', () => ingestor.onContacts(c)); });
+  client.on('lid-map', (m) => guarded('lid-map', () => ingestor.onLidMap(m)));
+  client.on('activity', (a) => guarded('activity', () => ingestor.onActivity(a)));
 
   runRetention();
   const retentionTimer = setInterval(runRetention, HOUR_MS);

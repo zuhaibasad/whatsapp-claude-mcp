@@ -2,7 +2,7 @@
 // Logs counters only, never message text.
 import type { ChatMeta, Config, GroupMeta, RawMessage, Store } from '../core/contracts.js';
 import type { Logger } from '../core/logger.js';
-import type { Chat, ChatType } from '../core/types.js';
+import type { Chat, ChatType, Contact } from '../core/types.js';
 import { isChatIncluded } from '../config/index.js';
 import { detectMention } from './mentions.js';
 
@@ -19,12 +19,14 @@ export interface IngestCounters {
 }
 
 function chatTypeOf(id: string): ChatType {
-  return id.endsWith('@g.us') ? 'group' : 'direct';
+  if (id.endsWith('@g.us')) return 'group';
+  return id.endsWith('@newsletter') ? 'channel' : 'direct';
 }
+
+const bestName = (c: Contact | null): string | null => c?.savedName ?? c?.pushName ?? c?.verifiedName ?? null;
 
 export class Ingestor {
   readonly counters: IngestCounters = { ingested: 0, skipped_excluded: 0, duplicates: 0 };
-  private readonly contacts = new Map<string, string>();
 
   constructor(
     private readonly store: Store,
@@ -39,10 +41,15 @@ export class Ingestor {
     return isChatIncluded(this.getConfig(), chat);
   }
 
+  /** Best known contact name for a JID (phone or LID form), from the store. */
+  private contactName(id: string): string | null {
+    return bestName(this.store.getContact(id));
+  }
+
   onChats(chats: ChatMeta[]): void {
     for (const c of chats) {
       const existing = this.store.getChat(c.id);
-      const name = c.name ?? existing?.name ?? (c.type === 'direct' ? (this.contacts.get(c.id) ?? null) : null);
+      const name = c.name ?? existing?.name ?? (c.type === 'direct' ? this.contactName(c.id) : null);
       const patch: Partial<Chat> & { id: string; type: ChatType } = {
         id: c.id,
         type: c.type,
@@ -52,6 +59,10 @@ export class Ingestor {
       if (c.muted !== undefined) patch.muted = c.muted;
       if (c.archived !== undefined) patch.archived = c.archived;
       this.store.upsertChat(patch);
+      // Activity and unread count: timestamp and number only, recorded for excluded chats too.
+      if (c.lastActivityAt !== undefined || c.unreadCount !== undefined) {
+        this.store.touchChatActivity(c.id, c.lastActivityAt ?? 0, c.unreadCount, patch.included ?? false);
+      }
     }
   }
 
@@ -71,22 +82,46 @@ export class Ingestor {
         g.id,
         g.participants.map((p) => ({ contactId: p.id, displayName: p.displayName, isAdmin: p.isAdmin })),
       );
+      for (const p of g.participants) {
+        if (p.displayName) this.store.upsertContact({ id: p.id, pushName: p.displayName });
+      }
     }
   }
 
-  onContacts(contacts: { id: string; name: string | null }[]): void {
+  onContacts(contacts: (Partial<Contact> & { id: string })[]): void {
     for (const c of contacts) {
-      if (!c.name) continue;
-      this.contacts.set(c.id, c.name);
-      const chat = this.store.getChat(c.id);
-      if (chat && chat.type === 'direct' && chat.name === null) {
-        this.store.upsertChat({
-          id: c.id,
-          type: 'direct',
-          name: c.name,
-          included: this.included({ id: c.id, name: c.name, type: 'direct' }),
-        });
+      this.store.upsertContact(c);
+      if (c.lid && c.phoneJid) this.store.linkLid(c.lid, c.phoneJid);
+      const stored = this.store.getContact(c.id);
+      const name = bestName(stored);
+      if (!name) continue;
+      for (const key of new Set([c.id, stored?.phoneJid, stored?.lid])) {
+        if (!key) continue;
+        const chat = this.store.getChat(key);
+        if (chat && chat.type === 'direct' && chat.name === null) {
+          this.store.upsertChat({
+            id: key, type: 'direct', name, included: this.included({ id: key, name, type: 'direct' }),
+          });
+        }
       }
+    }
+  }
+
+  onLidMap(m: { lid: string; phoneJid: string }): void {
+    this.store.linkLid(m.lid, m.phoneJid);
+  }
+
+  /** Metadata for every message, even from excluded chats. Stores a timestamp and a push name; never text. */
+  onActivity(a: { chatId: string; ts: number; pushName: string | null; senderId: string }): void {
+    if (!this.store.getChat(a.chatId)) {
+      const type = chatTypeOf(a.chatId);
+      const name = type === 'direct' ? this.contactName(a.chatId) : null;
+      this.store.touchChatActivity(a.chatId, a.ts, undefined, this.included({ id: a.chatId, name, type }));
+    } else {
+      this.store.touchChatActivity(a.chatId, a.ts);
+    }
+    if (a.pushName && a.senderId && !a.senderId.endsWith('@g.us') && !a.senderId.endsWith('@newsletter')) {
+      this.store.upsertContact({ id: a.senderId, pushName: a.pushName });
     }
   }
 
@@ -97,7 +132,7 @@ export class Ingestor {
       let chat = this.store.getChat(raw.chatId);
       if (!chat) {
         const type = chatTypeOf(raw.chatId);
-        const name = type === 'direct' ? (this.contacts.get(raw.chatId) ?? null) : null;
+        const name = type === 'direct' ? this.contactName(raw.chatId) : null;
         const included = this.included({ id: raw.chatId, name, type });
         this.store.upsertChat({ id: raw.chatId, type, ...(name !== null ? { name } : {}), included });
         chat = this.store.getChat(raw.chatId);
@@ -113,7 +148,7 @@ export class Ingestor {
       const inserted = this.store.insertMessage({
         ...raw,
         text,
-        senderName: raw.senderName ?? this.contacts.get(raw.senderId) ?? null,
+        senderName: raw.senderName ?? this.contactName(raw.senderId),
         mentionReason,
       });
       if (inserted) this.counters.ingested++;

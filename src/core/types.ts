@@ -24,6 +24,9 @@ export interface Chat {
   archived: boolean;
   included: boolean;
   lastMessageAt: number | null;
+  /** Last activity timestamp, also for excluded chats (no content). */
+  lastActivityAt?: number | null;
+  unreadCount?: number | null;
 }
 
 export interface Participant {

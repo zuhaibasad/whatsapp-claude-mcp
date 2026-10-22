@@ -1,4 +1,3 @@
-import { SCHEMA_VERSION } from '../core/constants.js';
 import type { Db } from '../core/contracts.js';
 
 /** Schema v1 (docs/PLAN.md section 5). messages.mention_reason replaces the plan's mentions_me INT. */
@@ -93,13 +92,52 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE INDEX IF NOT EXISTS idx_items_status ON items (status);
 `;
 
-/** Creates/updates the schema. Idempotent. */
+/** Store schema version (core SCHEMA_VERSION is still 1; the store owns its own number until the orchestrator bumps it). */
+export const STORE_SCHEMA_VERSION = 2;
+
+/** v1 -> v2: channel chat type, activity/unread columns, contacts table. Rebuilds chats (CHECK change). */
+const UPGRADE_V2 = `
+CREATE TABLE chats_v2 (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL CHECK (type IN ('group','direct','channel')),
+  name TEXT,
+  participant_count INTEGER,
+  muted INTEGER NOT NULL DEFAULT 0,
+  archived INTEGER NOT NULL DEFAULT 0,
+  included INTEGER NOT NULL DEFAULT 1,
+  last_message_at INTEGER,
+  unread_count INTEGER,
+  last_activity_at INTEGER
+);
+INSERT INTO chats_v2(id, type, name, participant_count, muted, archived, included, last_message_at, unread_count, last_activity_at)
+  SELECT id, CASE WHEN id LIKE '%@newsletter' THEN 'channel' ELSE type END, name, participant_count, muted, archived,
+         included, last_message_at, NULL, last_message_at FROM chats;
+DROP TABLE chats;
+ALTER TABLE chats_v2 RENAME TO chats;
+
+CREATE TABLE IF NOT EXISTS contacts (
+  id TEXT PRIMARY KEY,
+  phone_jid TEXT,
+  lid TEXT,
+  saved_name TEXT,
+  push_name TEXT,
+  verified_name TEXT,
+  updated_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts (phone_jid);
+CREATE INDEX IF NOT EXISTS idx_contacts_lid ON contacts (lid);
+`;
+
+/** Creates/updates the schema (v1 then v2). Idempotent. */
 export function migrate(db: Db): void {
   db.transaction(() => {
     db.exec(SCHEMA_V1);
-    db.prepare("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION));
+    db.prepare("INSERT OR IGNORE INTO meta(key, value) VALUES ('schema_version', '1')").run();
+    const cur = Number((db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string }).value);
+    if (cur > STORE_SCHEMA_VERSION) throw new Error(`store.db schema v${cur} is newer than supported v${STORE_SCHEMA_VERSION}`);
+    if (cur < 2) {
+      db.exec(UPGRADE_V2);
+      db.prepare("UPDATE meta SET value = '2' WHERE key = 'schema_version'").run();
+    }
   })();
-  const row = db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
-  const v = Number(row?.value ?? 0);
-  if (v > SCHEMA_VERSION) throw new Error(`store.db schema v${v} is newer than supported v${SCHEMA_VERSION}`);
 }

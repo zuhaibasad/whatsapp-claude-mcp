@@ -15,6 +15,10 @@ include_groups: true
 # Read messages from one-to-one (direct) chats?
 include_direct_chats: false
 
+# Read messages from WhatsApp Channels (newsletters you follow)?
+# Channels are public broadcasts; this is off unless you turn it on.
+include_channels: false
+
 # Chats to include even when their type is switched off above.
 # Each entry is a chat name or a chat id. Names are matched case-insensitively. Example:
 #   allowlist:

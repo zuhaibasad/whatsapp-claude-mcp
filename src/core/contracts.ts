@@ -1,7 +1,7 @@
 // Interfaces between modules. Workers implement these exactly; change only via the orchestrator.
 import type Database from 'better-sqlite3-multiple-ciphers';
 import type {
-  Account, Chat, ChatType, Item, ItemInput, ItemStatus, ItemPriority,
+  Account, Chat, ChatType, Contact, Item, ItemInput, ItemStatus, ItemPriority,
   MessageInput, MentionReason, Participant, StoredMessage,
 } from './types.js';
 
@@ -118,6 +118,17 @@ export interface Store {
   getChat(id: string): Chat | null;
   listChats(q?: ListChatsQuery): ChatSummary[];
   setChatIncluded(id: string, included: boolean): void;
+  /** Merges non-null fields into the contact; a null/undefined never overwrites a stored value. */
+  upsertContact(c: Partial<Contact> & { id: string }): void;
+  /** Looks up by contact id, phone JID or LID. */
+  getContact(idOrPhoneOrLid: string): Contact | null;
+  /** Records the LID <-> phone JID pair in both directions (merging separate rows). */
+  linkLid(lid: string, phoneJid: string): void;
+  /**
+   * Activity timestamp only (no content): last_activity_at = max(old, ts); unreadCount stored when given.
+   * Creates a minimal chat row if missing (type from the JID suffix, `included` from the caller, default false).
+   */
+  touchChatActivity(chatId: string, ts: number, unreadCount?: number | null, included?: boolean): void;
   replaceParticipants(chatId: string, participants: Omit<Participant, 'chatId'>[]): void;
   getParticipants(chatId: string): Participant[];
 
@@ -169,6 +180,9 @@ export interface ChatMeta {
   name: string | null;
   muted?: boolean;
   archived?: boolean;
+  /** Seconds. From Baileys conversationTimestamp. */
+  lastActivityAt?: number;
+  unreadCount?: number;
 }
 
 export interface GroupMeta {
@@ -184,7 +198,11 @@ export interface WaClientEvents {
   delete: (e: { chatId: string; messageId: string }) => void;
   chats: (chats: ChatMeta[]) => void;
   groups: (groups: GroupMeta[]) => void;
-  contacts: (contacts: { id: string; name: string | null }[]) => void;
+  contacts: (contacts: (Partial<Contact> & { id: string })[]) => void;
+  /** LID <-> phone JID pair (Baileys lid-mapping.update, history lidPnMappings, message *Alt fields). */
+  'lid-map': (m: { lid: string; phoneJid: string }) => void;
+  /** One per upserted message BEFORE filtering. No text. Lets excluded chats get a timestamp and push name. */
+  activity: (a: { chatId: string; ts: number; pushName: string | null; senderId: string }) => void;
 }
 
 /**

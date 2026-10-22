@@ -167,6 +167,8 @@ export async function runLinkSession(
     c.on('chats', (x) => { for (const ch of x) chatIds.add(ch.id); guarded('chats', () => ingestor.onChats(x)); progress(); });
     c.on('groups', (g) => guarded('groups', () => ingestor.onGroups(g)));
     c.on('contacts', (x) => guarded('contacts', () => ingestor.onContacts(x)));
+    c.on('lid-map', (m) => guarded('lid-map', () => ingestor.onLidMap(m)));
+    c.on('activity', (a) => guarded('activity', () => ingestor.onActivity(a)));
     const result = await new Promise<{ id: string; pushName: string | null }>((resolve, reject) => {
       let settled = false;
       let restarts = 0;

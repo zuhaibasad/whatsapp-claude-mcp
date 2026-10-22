@@ -73,7 +73,7 @@ describe('Ingestor', () => {
   });
 
   it('fills sender names from contacts', () => {
-    ing.onContacts([{ id: 'a@s.whatsapp.net', name: 'Ali' }]);
+    ing.onContacts([{ id: 'a@s.whatsapp.net', savedName: 'Ali' }]);
     ing.onMessages([raw({ id: 'x' })]);
     expect(store.getMessage(G1, 'x')?.senderName).toBe('Ali');
   });
@@ -105,7 +105,7 @@ describe('Ingestor', () => {
     const d = '7@s.whatsapp.net';
     ing.onChats([{ id: d, type: 'direct', name: null }]);
     expect(store.getChat(d)?.name).toBeNull();
-    ing.onContacts([{ id: d, name: 'Sara' }]);
+    ing.onContacts([{ id: d, savedName: 'Sara' }]);
     expect(store.getChat(d)?.name).toBe('Sara');
   });
 
