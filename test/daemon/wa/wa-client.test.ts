@@ -54,6 +54,7 @@ async function build(userOverride?: object) {
     auth,
     logger: pino({ level: 'silent' }),
     socketFactory: s.factory,
+    env: {},
     fetchVersion: async () => ({ version: [2, 3000, 1] }),
   });
   const seen = {
