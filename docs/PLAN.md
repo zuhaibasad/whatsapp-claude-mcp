@@ -252,3 +252,6 @@ flowchart LR
 2. **MCP Apps support** in our SDK (`@modelcontextprotocol/ext-apps` 2.x) and current Claude Desktop: app-only tool visibility, polling, and size limits for a 520-row picker.
 3. **Do app-only tool results stay local in Desktop?** Assume they may be logged with the conversation: show the QR only in the panel, and keep chat names minimal.
 4. **Auto-start on Windows:** a Task Scheduler entry at logon, per-user, no admin rights.
+
+### 11.1 Update (2026-10-22): collector hosted inside the MCP server process
+Supersedes the "service + Task Scheduler" parts of §11 (see DECISIONS). Flow: Claude starts → wa-bridge MCP process starts → takes the lock → connects (catch-up) → tools read the store. Setup panel (Desktop) / localhost setup page (Claude Code) talk to the lock holder. No auto-start, no installer.

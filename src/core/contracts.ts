@@ -155,6 +155,8 @@ export type ConnectionState =
   | { state: 'connecting' }
   | { state: 'qr'; qr: string }
   | { state: 'open'; me: { id: string; lid: string | null; pushName: string | null } }
+  /** Offline messages delivered (Baileys receivedPendingNotifications). Emitted once per connection, after open. */
+  | { state: 'caught_up' }
   | { state: 'close'; reason: 'logged_out' | 'restart_required' | 'connection_lost' | 'replaced' | 'bad_session' | 'forbidden' | 'unknown'; retry: boolean };
 
 /** Raw message content after normalization, before mention detection. */

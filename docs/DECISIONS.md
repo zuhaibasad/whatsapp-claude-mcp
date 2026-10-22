@@ -39,3 +39,12 @@ Newest first. Each entry: date, decision, reason, alternatives.
 - **Why:** claude.ai web can only reach remote tools, which would expose WhatsApp data to the internet and break the local-only rule. Desktop and Claude Code run local tools.
 - **Consequence:** the setup UI is a local web page served by the service (works everywhere), plus the same UI as an in-chat MCP App panel in Desktop. No terminal for end users. Data moves to a per-user data dir.
 - **Premium ideas** (voice notes, call items, call transcription, claude.ai via tunnel) are on hold in `docs/ROADMAP.md`.
+
+## 2026-10-22 — No background service: the collector runs only while Claude is open
+- **Decision (user):** no Task Scheduler, no startup entry, no long-running service. The wa-bridge MCP server process, which Claude Desktop or Claude Code keeps running for the session, also hosts the WhatsApp collector.
+- **Why:** briefs only run while Claude is open anyway. On start, the collector reconnects and WhatsApp delivers the messages that arrived while it was offline. Packaging becomes much simpler: no runtime copied to disk, no scheduler, no update dance.
+- **One connection rule:** several MCP processes may run at once (Desktop plus Claude Code). The one that holds the lock (`daemon.lock`) runs the collector. The others only read the store and forward setup actions to the holder over 127.0.0.1. They retry the lock every 30 s, so one takes over when the holder exits.
+- **Code boundary unchanged:** only `src/daemon/wa/**` imports Baileys. The MCP *tools* still only read the store. The collector is a co-hosted component started by the MCP entry point.
+- **Freshness:** after connect, the collector reports `catching_up` until Baileys signals `receivedPendingNotifications` (plus a short quiet period). Briefs wait for that, with a timeout.
+- **Risk:** if Claude is not opened for a long time, WhatsApp may stop holding offline messages or log the linked device out (period unverified, roughly weeks). `get_status` warns, and re-linking is a one-click setup.
+- **Supersedes:** the R2 recommendation of a bundled node.exe + Task Scheduler service.
