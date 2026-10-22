@@ -4,7 +4,9 @@ import { pathToFileURL } from 'node:url';
 import { Command } from 'commander';
 import { daemonPhase3Command, daemonStartCommand, daemonStopCommand } from './commands/daemon.js';
 import { initCommand } from './commands/init.js';
+import { exportCommand, itemsCommand, itemStatusCommand } from './commands/items.js';
 import { linkCommand } from './commands/link.js';
+import { mcpCommand } from './commands/mcp.js';
 import { chatsCommand, newCommand, purgeCommand, searchCommand } from './commands/read.js';
 import { statusCommand } from './commands/status.js';
 import { unlinkCommand } from './commands/unlink.js';
@@ -91,6 +93,31 @@ export function buildProgram(io: Io, deps: CliDeps, setExit: (code: number) => v
     .description('delete stored messages older than a duration')
     .requiredOption('--older-than <duration>', 'e.g. 30d, 12h, 90m')
     .action((o: { olderThan: string }) => run(() => purgeCommand({ project: project(), olderThan: o.olderThan }, io, deps))());
+
+  const items = program.command('items')
+    .description('list saved follow-up items')
+    .option('--status <status>', 'open, done or dismissed')
+    .option('--department <name>', 'only this department')
+    .option('--priority <priority>', 'critical, high, normal or low')
+    .option('--json', 'machine-readable output')
+    .action((o: { status?: string; department?: string; priority?: string; json?: boolean }) =>
+      run(() => itemsCommand({ project: project(), ...o }, io, deps))());
+  items.command('done').description('mark an item done').argument('<id>', 'item id')
+    .action((id: string) => run(() => itemStatusCommand(id, 'done', { project: project() }, io, deps))());
+  items.command('dismiss').description('dismiss an item').argument('<id>', 'item id')
+    .action((id: string) => run(() => itemStatusCommand(id, 'dismissed', { project: project() }, io, deps))());
+
+  program.command('export')
+    .description('write saved items to a CSV or JSON file inside the project folder')
+    .option('--format <format>', 'csv or json', 'csv')
+    .option('--path <file>', 'target file inside the project folder')
+    .option('--status <status>', 'open, done or dismissed', 'open')
+    .action((o: { format?: string; path?: string; status?: string }) =>
+      run(() => exportCommand({ project: project(), ...o }, io, deps))());
+
+  program.command('mcp')
+    .description('run the MCP server on stdio (for Claude)')
+    .action(() => run(() => mcpCommand({ project: project() }, io, deps))());
 
   program.command('unlink')
     .description('remove the linked device from WhatsApp and delete the local session')
