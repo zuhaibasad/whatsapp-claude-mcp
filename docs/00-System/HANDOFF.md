@@ -20,7 +20,7 @@ wa-bridge gives Claude **read-only** access to the user's own WhatsApp chats.
 | T18 content/context | `docs/tasks/T18-content-context.md` | merged | **Merged** (schema v3). |
 | T19 connection health + proxy | `docs/tasks/T19-connection-health.md` | merged | **Merged**. T20 must pass `onFrame` in the host default factory. |
 | T20 lifecycle (Disconnect in panel with user proof, chat notes, diagnose / `wa-bridge doctor`, backups before migrations) | `docs/tasks/T20-lifecycle-ops.md` | `worktree-agent-a48482ff6c0d18f69` | Same. |
-| T21 README rewrite (visual, short, SEO) + licence options | in the agent prompt; outputs `README.md`, `docs/assets/**`, `docs/GITHUB_SEO.md`, `docs/LICENSE_OPTIONS.md` | `worktree-agent-a77916063915c271c` | Started at session end. |
+| T21 README + licence options | (prompt) | merged | **Merged**: README 180 lines, docs/assets, GITHUB_SEO.md, LICENSE_OPTIONS.md. |
 
 **How to recover:**
 1. `git worktree list`
@@ -57,3 +57,7 @@ wa-bridge gives Claude **read-only** access to the user's own WhatsApp chats.
 
 ## Held for later (user decision)
 Voice-note transcription, missed-call items, call transcription (research only), claude.ai via tunnel, macOS/Linux, an n8n webhook for unattended CRM push, and per-department routing to Notion/ClickUp via Claude connectors. See `docs/ROADMAP.md`.
+
+## Waiting on the user (decisions)
+- **Licensing: blocks any public `.mcpb` release.** `baileys` → `libsignal` 6.0.0 is **GPL-3.0** (verified in node_modules). The `.mcpb` bundles it, so distributing it publicly likely makes the bundle GPL-3.0 with a source offer. Options and a recommendation are in `docs/LICENSE_OPTIONS.md` (keep Apache-2.0 core, fix NOTICE, ship third-party licences, keep premium separate). Private use by friends is less affected, but get the decision before publishing.
+- Review the new README (`README.md`, visuals in `docs/assets/`) and the repo name/topics in `docs/GITHUB_SEO.md`. The clone URL in README still says `zuhaibasad/whatsapp-claude-mcp`.
