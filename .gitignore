@@ -7,3 +7,9 @@ coverage/
 *.log
 qr.png
 .claude/worktrees/
+
+# Obsidian per-device state
+docs/.obsidian/workspace.json
+docs/.obsidian/workspace-mobile.json
+docs/.obsidian/cache
+.claude/settings.local.json

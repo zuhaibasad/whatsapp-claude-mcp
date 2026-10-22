@@ -1,6 +1,6 @@
 # Handoff — state at end of session (2026-10-22 evening)
 
-Read this first, then `docs/AGENTS.md` (how workers run), `docs/DECISIONS.md` (why things are the way they are) and `docs/PLAN.md` §11.
+Read this first (auto-injected at session start), then `docs/AGENTS.md` (how workers run), `docs/DECISIONS.md` (why things are the way they are) and `docs/PLAN.md` §11.
 
 ## Product in one paragraph
 wa-bridge gives Claude **read-only** access to the user's own WhatsApp chats.
