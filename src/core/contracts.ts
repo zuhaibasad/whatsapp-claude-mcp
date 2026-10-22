@@ -50,6 +50,16 @@ export interface Department {
   examples: string[];
 }
 
+/**
+ * Per-chat guidance for Claude (departments.yaml `chats:` section). Matched by chat id or name (case-insensitive).
+ * Guidance only — never changes which chats are read.
+ */
+export interface ChatNote {
+  match: string;                // chat id or chat name
+  department: string | null;    // default department for requests from this chat
+  note: string | null;          // free text, e.g. "Ali = vendor PM; 'invoice' means supplier invoice"
+}
+
 export interface PriorityRules {
   critical: string[];   // descriptions/examples of what counts as critical
   high: string[];
