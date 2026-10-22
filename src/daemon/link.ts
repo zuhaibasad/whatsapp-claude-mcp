@@ -4,7 +4,7 @@ import { loadConfig } from '../config/index.js';
 import { buildChatRows, computeRules, writeSelection, type ChatChoice } from '../config/selection.js';
 import type { ChatRow, Db, MasterKeyStore, RawMessage, WaClient } from '../core/contracts.js';
 import { createLogger, type Logger } from '../core/logger.js';
-import { resolvePaths } from '../core/paths.js';
+import { resolvePaths, type DataPaths } from '../core/paths.js';
 import { createMasterKeyStore } from '../crypto/index.js';
 import { Ingestor } from './ingest.js';
 import { DaemonAlreadyRunningError, acquireLock } from './lock.js';
@@ -97,32 +97,35 @@ export interface SettleOptions {
 }
 export const DEFAULT_SETTLE: SettleOptions = { minMs: 10_000, quietMs: 15_000, maxMs: 120_000 };
 
-export async function linkAccount(opts: {
-  projectRoot: string;
+export interface LinkSessionOptions {
   onQr(qr: string): Promise<void> | void;
   timeoutMs?: number;
-  /** Progress lines for the user (e.g. "receiving initial sync"). */
   onStatus?(msg: string): void;
+  /** Called once when the account is linked (before the initial sync settles). */
+  onLinked?(account: { id: string; pushName: string | null }): void;
+  /** Called with running counts while the initial sync arrives. */
+  onProgress?(p: { chats: number; messages: number }): void;
   settle?: Partial<SettleOptions>;
-  /**
-   * Lets the user pick which chats to read, after the initial sync and after the WhatsApp connection is closed.
-   * Gets every known chat (also excluded ones); returns the chosen chat ids, or null to keep the config defaults.
-   */
   chooseChats?(rows: ChatRow[]): Promise<Set<string> | null>;
-  /** Test hook: cap for the in-memory buffer of excluded-chat messages. */
   bufferCap?: number;
-  deps?: Partial<LinkDeps>;
-}): Promise<{ id: string; pushName: string | null }> {
-  const paths = resolvePaths(opts.projectRoot);
+  /** Aborting before the account is linked makes the session fail with "linking cancelled". */
+  signal?: AbortSignal;
+  logger: Logger;
+  waClientFactory: (args: WaClientFactoryArgs) => WaClient;
+}
+
+/**
+ * Runs one linking session on already-open databases. The caller owns the lock and the DBs.
+ * Shows QR codes through onQr, waits for the initial sync, lets the user choose chats, then closes the client.
+ */
+export async function runLinkSession(
+  dbs: Pick<OpenedDbs, 'store' | 'storeDb' | 'auth'>,
+  paths: DataPaths,
+  opts: LinkSessionOptions,
+): Promise<{ id: string; pushName: string | null }> {
   const timeoutMs = opts.timeoutMs ?? 180_000;
   const settle: SettleOptions = { ...DEFAULT_SETTLE, ...opts.settle };
-  const keyStore = (opts.deps?.keyStore ?? createMasterKeyStore)(paths.projectRoot);
-  const waClientFactory =
-    opts.deps?.waClientFactory ?? ((a: WaClientFactoryArgs) => createWaClient({ auth: a.auth, logger: a.logger }));
-
-  fs.mkdirSync(paths.dataDir, { recursive: true });
-  let lock: { release(): void } | null = null;
-  let dbs: OpenedDbs | null = null;
+  const { logger, waClientFactory } = opts;
   let client: WaClient | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let settleTimer: ReturnType<typeof setInterval> | null = null;
@@ -138,25 +141,7 @@ export async function linkAccount(opts: {
     }
   };
   try {
-    try {
-      lock = acquireLock(paths.lockFile);
-    } catch (err) {
-      if (err instanceof DaemonAlreadyRunningError) {
-        throw new Error(`the daemon is running (pid ${err.pid}): stop the daemon first`);
-      }
-      throw err;
-    }
-    const master = keyStore.get();
-    if (!master) throw new Error(NOT_INITIALIZED_MESSAGE);
-    const logger = opts.deps?.logger ?? createLogger({ level: 'warn', name: 'wa-bridge-link', file: paths.logFile });
-    dbs = await openDaemonDbs(paths, master);
     const { store, auth } = dbs;
-
-    const existing = store.getAccount();
-    if (auth.hasCreds() && existing && existing.linkStatus !== 'logged_out' && existing.linkStatus !== 'unlinked') {
-      throw new AlreadyLinkedError();
-    }
-
     let config = loadConfig(paths).config;
     let me: { id: string; lid: string | null } | null = null;
     const ingestor = new Ingestor(store, () => config, () => (me ? { ...me, names: config.myNames } : null), logger);
@@ -173,10 +158,13 @@ export async function linkAccount(opts: {
 
     const c = waClientFactory({ auth, logger });
     client = c;
-    c.on('messages', (m) => guarded('messages', () => ingestor.onMessages(m)));
+    let msgCount = 0;
+    const chatIds = new Set<string>();
+    const progress = (): void => opts.onProgress?.({ chats: chatIds.size, messages: msgCount });
+    c.on('messages', (m) => { msgCount += m.length; guarded('messages', () => ingestor.onMessages(m)); progress(); });
     c.on('edit', (e) => guarded('edit', () => ingestor.onEdit(e)));
     c.on('delete', (e) => guarded('delete', () => ingestor.onDelete(e)));
-    c.on('chats', (x) => guarded('chats', () => ingestor.onChats(x)));
+    c.on('chats', (x) => { for (const ch of x) chatIds.add(ch.id); guarded('chats', () => ingestor.onChats(x)); progress(); });
     c.on('groups', (g) => guarded('groups', () => ingestor.onGroups(g)));
     c.on('contacts', (x) => guarded('contacts', () => ingestor.onContacts(x)));
     const result = await new Promise<{ id: string; pushName: string | null }>((resolve, reject) => {
@@ -187,6 +175,11 @@ export async function linkAccount(opts: {
         settled = true;
         reject(err);
       };
+      if (opts.signal) {
+        const onAbort = (): void => { if (!me) fail(new Error('linking cancelled')); };
+        if (opts.signal.aborted) onAbort();
+        else opts.signal.addEventListener('abort', onAbort, { once: true });
+      }
       timer = setTimeout(() => fail(new Error('linking timed out: no QR scan within the time limit')), timeoutMs);
 
       const connect = (): void => {
@@ -218,6 +211,7 @@ export async function linkAccount(opts: {
               return;
             }
             me = { id: s.me.id, lid: s.me.lid };
+            opts.onLinked?.({ id: s.me.id, pushName: s.me.pushName });
             config = loadConfig(paths).config;
             if (timer) clearTimeout(timer);
             opts.onStatus?.('Linked. Receiving the initial sync from your phone (up to 2 minutes)...');
@@ -299,6 +293,61 @@ export async function linkAccount(opts: {
     if (timer) clearTimeout(timer);
     if (settleTimer) clearInterval(settleTimer);
     await closeClient();
+  }
+}
+
+export async function linkAccount(opts: {
+  projectRoot: string;
+  onQr(qr: string): Promise<void> | void;
+  timeoutMs?: number;
+  /** Progress lines for the user (e.g. "receiving initial sync"). */
+  onStatus?(msg: string): void;
+  settle?: Partial<SettleOptions>;
+  /**
+   * Lets the user pick which chats to read, after the initial sync and after the WhatsApp connection is closed.
+   * Gets every known chat (also excluded ones); returns the chosen chat ids, or null to keep the config defaults.
+   */
+  chooseChats?(rows: ChatRow[]): Promise<Set<string> | null>;
+  /** Test hook: cap for the in-memory buffer of excluded-chat messages. */
+  bufferCap?: number;
+  deps?: Partial<LinkDeps>;
+}): Promise<{ id: string; pushName: string | null }> {
+  const paths = resolvePaths(opts.projectRoot);
+  const keyStore = (opts.deps?.keyStore ?? createMasterKeyStore)(paths.projectRoot);
+  const waClientFactory =
+    opts.deps?.waClientFactory ?? ((a: WaClientFactoryArgs) => createWaClient({ auth: a.auth, logger: a.logger }));
+
+  fs.mkdirSync(paths.dataDir, { recursive: true });
+  let lock: { release(): void } | null = null;
+  let dbs: OpenedDbs | null = null;
+  try {
+    try {
+      lock = acquireLock(paths.lockFile);
+    } catch (err) {
+      if (err instanceof DaemonAlreadyRunningError) {
+        throw new Error(`the daemon is running (pid ${err.pid}): stop the daemon first`);
+      }
+      throw err;
+    }
+    const master = keyStore.get();
+    if (!master) throw new Error(NOT_INITIALIZED_MESSAGE);
+    const logger = opts.deps?.logger ?? createLogger({ level: 'warn', name: 'wa-bridge-link', file: paths.logFile });
+    dbs = await openDaemonDbs(paths, master);
+    const existing = dbs.store.getAccount();
+    if (dbs.auth.hasCreds() && existing && existing.linkStatus !== 'logged_out' && existing.linkStatus !== 'unlinked') {
+      throw new AlreadyLinkedError();
+    }
+    return await runLinkSession(dbs, paths, {
+      onQr: opts.onQr,
+      logger,
+      waClientFactory,
+      ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+      ...(opts.onStatus ? { onStatus: opts.onStatus } : {}),
+      ...(opts.settle ? { settle: opts.settle } : {}),
+      ...(opts.chooseChats ? { chooseChats: opts.chooseChats } : {}),
+      ...(opts.bufferCap !== undefined ? { bufferCap: opts.bufferCap } : {}),
+    });
+  } finally {
     dbs?.close();
     lock?.release();
     fs.rmSync(paths.qrPng, { force: true });

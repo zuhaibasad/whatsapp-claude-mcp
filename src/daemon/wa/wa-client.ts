@@ -176,10 +176,15 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
     const live = (): boolean => gen === generation;
     const ev = current.ev;
     let groupsFetched = false;
+    let caughtUpEmitted = false;
 
     ev.on('connection.update', (u: BaileysEventMap['connection.update']) => {
       if (!live()) return;
       if (u.qr) emit('connection', { state: 'qr', qr: u.qr });
+      if (u.receivedPendingNotifications === true && !caughtUpEmitted) {
+        caughtUpEmitted = true;
+        emit('connection', { state: 'caught_up' });
+      }
       if (u.connection === 'connecting') emit('connection', { state: 'connecting' });
       if (u.connection === 'open') {
         const user = current.user;
