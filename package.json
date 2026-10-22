@@ -1,8 +1,8 @@
 {
   "name": "wa-bridge",
   "version": "0.2.0",
-  "description": "Read-only local WhatsApp bridge for Claude (MCP + CLI + skills). Personal use.",
-  "license": "UNLICENSED",
+  "description": "Read-only local WhatsApp bridge for Claude (MCP + CLI + skills).",
+  "license": "Apache-2.0",
   "private": true,
   "type": "module",
   "bin": {

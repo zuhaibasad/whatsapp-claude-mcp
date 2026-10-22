@@ -1,5 +1,5 @@
 // Builds build/wa-bridge-<version>.mcpb for Claude Desktop (win32-x64).
-// Steps: npm run build -> stage dist/ templates/ package.json -> npm ci --omit=dev in the stage -> prune -> mcpb pack.
+// Steps: npm run build -> stage app + license files -> npm ci --omit=dev in the stage -> prune -> mcpb pack.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -39,6 +39,9 @@ fs.cpSync(path.join(root, 'dist'), path.join(stage, 'dist'), { recursive: true }
 fs.cpSync(path.join(root, 'templates'), path.join(stage, 'templates'), { recursive: true });
 fs.copyFileSync(path.join(root, 'package.json'), path.join(stage, 'package.json'));
 fs.copyFileSync(path.join(root, 'package-lock.json'), path.join(stage, 'package-lock.json'));
+for (const file of ['LICENSE', 'NOTICE']) {
+  fs.copyFileSync(path.join(root, file), path.join(stage, file));
+}
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'packaging', 'mcpb', 'manifest.json'), 'utf8'));
 manifest.version = pkg.version;
 fs.writeFileSync(path.join(stage, 'manifest.json'), JSON.stringify(manifest, null, 2));

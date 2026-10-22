@@ -6,7 +6,7 @@
   "description": "Read-only local WhatsApp context for Claude: briefs, mentions and follow-up items from the chats you choose. Unofficial linked device: against WhatsApp's terms, it can get the number restricted or banned. Data stays encrypted on this computer; message text goes to Anthropic only when Claude reads it. Never sends, never marks read.",
   "long_description": "wa-bridge links to your WhatsApp as a companion device and keeps an encrypted local copy of the chats you choose. Claude can then summarise new messages, find mentions and track follow-ups. It is strictly read-only: it never sends messages, never marks chats as read and never shows you online. Risks: this is an unofficial client, which WhatsApp's terms do not allow, so your number could be restricted or banned. Other chat members have not agreed to an AI reading their messages. Text that Claude reads is sent to Anthropic.",
   "author": { "name": "Zuhaib Asad" },
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "compatibility": { "platforms": ["win32"], "runtimes": { "node": ">=20" } },
   "server": {
     "type": "node",
