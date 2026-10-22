@@ -31,6 +31,8 @@ export class Ingestor {
     private readonly getConfig: () => Config,
     private readonly me: () => IngestMe | null,
     private readonly logger: Logger,
+    /** Called instead of silently dropping a message from an excluded chat. The daemon does not set it. */
+    public onExcluded?: (msg: RawMessage) => void,
   ) {}
 
   private included(chat: { id: string; name: string | null; type: ChatType }): boolean {
@@ -102,6 +104,7 @@ export class Ingestor {
       }
       if (!chat?.included) {
         this.counters.skipped_excluded++;
+        this.onExcluded?.(raw);
         continue;
       }
       const mentionReason = me ? detectMention(raw, me) : null;

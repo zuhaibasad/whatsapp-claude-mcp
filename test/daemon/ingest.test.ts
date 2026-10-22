@@ -42,6 +42,15 @@ describe('Ingestor', () => {
     expect(ing.counters).toMatchObject({ ingested: 1, skipped_excluded: 2 });
   });
 
+  it('calls onExcluded instead of dropping silently, and not for included chats', () => {
+    config.denylist = [G2];
+    const seen: string[] = [];
+    ing.onExcluded = (m) => void seen.push(m.chatId);
+    ing.onMessages([raw({ chatId: G1 }), raw({ chatId: G2 })]);
+    expect(seen).toEqual([G2]);
+    expect(store.counts().messages).toBe(1);
+  });
+
   it('applies mention detection', () => {
     ing.onMessages([
       raw({ id: 'a', mentions: [ME.lid] }),
