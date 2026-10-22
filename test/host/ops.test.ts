@@ -60,9 +60,9 @@ describe('backups', () => {
 describe('diagnose', () => {
   const base = { version: '1', now: () => 1_800_000_000_000, keyPresent: true, linkStatus: 'linked', collector: 'live' as const };
   it('warns when the data folder is MSIX-redirected', () => {
-    expect(isMsixRedirected('C:\\Users\\a\\AppData\\Local\\Packages\\Claude_abc\\LocalCache\\Local\\wa-bridge')).toBe(true);
-    expect(isMsixRedirected('C:\\Users\\a\\.wa-bridge')).toBe(false);
-    const msixPaths = { ...paths, dataDir: 'C:\\Users\\a\\AppData\\Local\\Packages\\Claude_abc\\LocalCache\\wa-bridge' };
+    expect(isMsixRedirected('C:\\Users\\a\\AppData\\Local\\Packages\\Claude_abc\\LocalCache\\Local\\chatai')).toBe(true);
+    expect(isMsixRedirected('C:\\Users\\a\\.chatai')).toBe(false);
+    const msixPaths = { ...paths, dataDir: 'C:\\Users\\a\\AppData\\Local\\Packages\\Claude_abc\\LocalCache\\chatai' };
     const d = buildDiagnosis({ ...base, paths: msixPaths, meta: () => null, freeBytes: () => 1e12 });
     const c = d.checks.find((x) => x.name === 'data_dir');
     expect(c?.ok).toBe(false);

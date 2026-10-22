@@ -19,7 +19,7 @@ describe('schema v2 -> v3', () => {
     db.prepare("INSERT INTO messages(id, chat_id, sender_id, ts, text) VALUES ('old','1@g.us','a',50,'legacy')").run();
     s.migrate();
     s.migrate();
-    expect(s.getMeta('schema_version')).toBe('3');
+    expect(s.getMeta('schema_version')).toBe('4');
     expect(s.getMessage('1@g.us', 'old')).toMatchObject({ text: 'legacy', quotedText: null, quotedSenderName: null, extra: null });
     s.insertMessage(msg({ id: 'n', quotedText: 'q', quotedSenderName: 'Q', extra: { location: { lat: 1, lng: 2 } } }));
     expect(s.getMessage('1@g.us', 'n')).toMatchObject({ quotedText: 'q', quotedSenderName: 'Q', extra: { location: { lat: 1, lng: 2 } } });

@@ -48,3 +48,16 @@ Newest first. Each entry: date, decision, reason, alternatives.
 - **Freshness:** after connect, the collector reports `catching_up` until Baileys signals `receivedPendingNotifications` (plus a short quiet period). Briefs wait for that, with a timeout.
 - **Risk:** if Claude is not opened for a long time, WhatsApp may stop holding offline messages or log the linked device out (period unverified, roughly weeks). `get_status` warns, and re-linking is a one-click setup.
 - **Supersedes:** the R2 recommendation of a bundled node.exe + Task Scheduler service.
+
+## 2026-10-22 — Images: download + local OCR (tesseract.js), text to Claude instead of pixels
+- **Decision (user):** company groups share bills and payment screenshots. Images in *selected* chats are downloaded, stored in the encrypted `store.db` (`media` table, schema v4), read on this PC with tesseract.js (WASM, English `best_int`), and pattern-matched into fields (amount, currency, date, reference, bank). Tools return the OCR text and fields; the picture itself only on request (`whatsapp_read` action `media`, `include_image`).
+- **Why:** an image costs about 1–1.5k tokens, OCR text a few dozen. Tesseract is pure JS/WASM (Apache-2.0), with no native binaries or child processes (MSIX-safe), and adds about 6 MB to the `.mcpb`.
+- **Read-only holds:** `downloadContentFromMessage` (HTTP fetch + decrypt, in `src/daemon/wa/media-download.ts`) only. `downloadMediaMessage` stays denied because it can call `updateMediaMessage` (a re-upload request to the phone). Expired media stays `expired`; it is never re-requested.
+- **Limits:** max 10 MB per image; `media_max_mb` (default 500) caps stored bytes, oldest dropped first, OCR text kept; retention purges media with messages. Config: `media_download`, `media_ocr`, `media_max_mb`. Media download does not use the proxy yet.
+- **Not yet:** PDFs, Urdu OCR, images from before 0.3 (no stored keys).
+
+## 2026-10-22 — Product renamed: ChatAI for WhatsApp (slug `chatai`)
+- **Decision (user):** product name "ChatAI for WhatsApp", with a new logo (`docs/assets/logo.svg`, `packaging/mcpb/icon.png`). The GitHub repo stays `whatsapp-claude-mcp`, and the local folder stays `wa-bridge`.
+- **Changed everywhere** (no users yet, the user's phone is already unlinked): CLI `chatai`, extension id `chatai`, MCP server name, data folder `~/.chatai`, keychain service `chatai`, env vars `CHATAI_*`, `ui://chatai/...`.
+- **Kept:** the KDF salt `wa-bridge/v1` (invisible; changing it would change derived keys), the WhatsApp device name "Desktop" (needed for full history sync), tool names `whatsapp_*`, skill folders `skills/wa-*`. Old session logs and task specs keep the old name as history.
+- **Trademark:** "X for WhatsApp" is the descriptive form. WhatsApp's green and phone mark are not used.

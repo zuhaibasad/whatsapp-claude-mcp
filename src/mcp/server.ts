@@ -5,10 +5,10 @@ import { findChatNote, loadChatNotes, loadConfig } from '../config/index.js';
 import { computeRules, currentSelection, writeSelection, type ChatChoice } from '../config/selection.js';
 import type { ChatNote, Config, Store } from '../core/contracts.js';
 import { resolvePaths, type DataPaths } from '../core/paths.js';
-import type { Chat, ItemCategory } from '../core/types.js';
+import type { Chat, ItemCategory, MediaInfo } from '../core/types.js';
 import { isoInZone, itemRow, writeItemsExport, ExportError } from '../export/index.js';
 import type { HostBridge } from './host.js';
-import { Budget, clip, contextBefore, messageJson, withNotice, type Json } from './format.js';
+import { Budget, clip, contextBefore, messageJson, OCR_INLINE_CHARS, ocrJson, senderLabel, withNotice, type Json } from './format.js';
 import { PROMPTS, SERVER_INSTRUCTIONS } from './instructions.js';
 import { registerSetupUi } from './setup-tools.js';
 
@@ -46,6 +46,8 @@ export interface McpDeps {
 // Limits. Chosen for Roman Urdu / Urdu / English chats with emoji, where one message is usually short.
 const MAX_LIMIT = 1000;
 const DEFAULT_NEW_LIMIT = 300;
+const MAX_MEDIA_REFS = 20;
+const MAX_INLINE_IMAGES = 5;
 
 export { clip };
 
@@ -161,13 +163,13 @@ export interface CreatedServer {
   handlers: Map<string, ToolHandler>;
 }
 
-const READ_ONLY_NOTE = 'Reads wa-bridge\'s local copy of WhatsApp; never contacts WhatsApp.';
-const OWN_RECORDS_NOTE = 'Changes only wa-bridge\'s own records, never WhatsApp.';
+const READ_ONLY_NOTE = 'Reads ChatAI\'s local copy of WhatsApp; never contacts WhatsApp.';
+const OWN_RECORDS_NOTE = 'Changes only ChatAI\'s own records, never WhatsApp.';
 
 export function createServer(deps: McpDeps, options: ServerOptions = {}): CreatedServer {
   const paths = deps.paths ?? resolvePaths(deps.projectRoot);
   const server = new McpServer(
-    { name: 'wa-bridge', version: '0.2.0' },
+    { name: 'chatai', version: '0.3.0' },
     { capabilities: { tools: { listChanged: true }, resources: {}, prompts: {} }, instructions: SERVER_INSTRUCTIONS },
   );
   const handlers = new Map<string, ToolHandler>();
@@ -370,6 +372,48 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       };
     });
 
+  tool('get_media',
+    `Images (bills, payment screenshots) with the text read from them on this PC (OCR) and extracted fields. ${READ_ONLY_NOTE}`,
+    z.object({
+      refs: z.array(z.string()).max(MAX_MEDIA_REFS).optional(),
+      chats: z.array(z.string()).optional(), since: optIso, until: optIso,
+      limit: z.number().int().min(1).optional(),
+    }),
+    { write: false, readOnlyHint: true, hidden: true },
+    (a, c, store) => {
+      const tz = c.config.timezone;
+      const row = (info: MediaInfo, chatName: string | null, full: boolean): Json => {
+        const msg = store.getMessage(info.chatId, info.messageId);
+        return {
+          ref: `${info.chatId}/${info.messageId}`, chat_name: chatName, ts: isoInZone(info.ts, tz),
+          from: msg ? senderLabel(msg) : null, caption: msg?.text ?? null,
+          image: ocrJson(info, full ? 4000 : OCR_INLINE_CHARS), image_stored: info.hasBytes,
+        };
+      };
+      if (a.refs && a.refs.length > 0) {
+        const items = a.refs.map((ref) => {
+          const { chatId, messageId } = splitRef(ref);
+          const info = store.getMediaInfo(chatId, messageId);
+          if (!info) return { ref, error: 'no image for this ref (not an image, from before images were collected, or purged)' };
+          return row(info, store.getChat(chatId)?.name ?? null, true);
+        });
+        return withNotice({ images: items });
+      }
+      const limit = Math.min(clampLimit(a.limit, 50), 200);
+      const list = store.listMedia({
+        chatIds: resolveChatIds(store, a.chats),
+        since: a.since ? parseTime(a.since, c.nowSec, 'since') : undefined,
+        until: a.until ? parseTime(a.until, c.nowSec, 'until') : undefined,
+        limit: limit + 1,
+      });
+      const pending = list.filter((m) => m.status === 'pending').length;
+      return withNotice({
+        truncated: list.length > limit,
+        images: list.slice(0, limit).map((m) => row(m, m.chatName, false)),
+        ...(pending > 0 ? { note: `${pending} image(s) are still being downloaded and read; ask again in a minute` } : {}),
+      });
+    });
+
   // get_status must work even when nothing is set up, so it handles open errors itself.
   const statusRun: ToolHandler = async () => {
     try {
@@ -397,7 +441,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
         const lastLive = metaSeconds(store.getMeta('last_live_at'));
         if (link === 'logged_out' || collector === 'logged_out') warnings.push('WhatsApp logged this device out. Say: "set up WhatsApp" to link it again.');
         else if (link === 'unlinked') warnings.push('No WhatsApp account is linked. Say: "set up WhatsApp" (I will open the setup panel).');
-        if (!running && link !== 'unlinked') warnings.push('The collector is not running (it runs while Claude is open); data may be old. It starts when Claude starts the wa-bridge connector.');
+        if (!running && link !== 'unlinked') warnings.push('The collector is not running (it runs while Claude is open); data may be old. It starts when Claude starts the chatai connector.');
         else if (running && link !== 'unlinked' && collector !== 'live') warnings.push(`The collector is ${collector}: recent messages may still be arriving. Call whatsapp_status with wait_for_sync_seconds before a brief.`);
         if (running && lastSync !== null && (c.nowSec - lastSync) / 60 > 60) warnings.push('no sync for more than 60 minutes');
         const iso = (t: number | null | undefined): string | null => (t ? isoInZone(t, c.config.timezone) : null);
@@ -482,7 +526,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     });
 
   tool('export_items',
-    'Write saved items to a CSV (Excel-friendly, UTF-8) or JSON file inside the project folder and return its path. Default path is .wa-bridge/exports/items-<date>.<ext>; paths outside the project folder are rejected. Writes a file only; never contacts WhatsApp.',
+    'Write saved items to a CSV (Excel-friendly, UTF-8) or JSON file inside the project folder and return its path. Default path is .chatai/exports/items-<date>.<ext>; paths outside the project folder are rejected. Writes a file only; never contacts WhatsApp.',
     z.object({
       format: z.enum(['csv', 'json']), path: z.string().optional().describe('relative to the project folder'),
       status: itemStatus.optional().describe('default "open"'),
@@ -575,6 +619,24 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       return { sync: null, warning: 'could not wait for the collector (it is still starting or not running); data may be incomplete' };
     }
   };
+  /** Appends stored images (base64) to a text result. Only on explicit request: an image costs far more than its OCR text. */
+  const withImages = (res: ToolResult, refs: string[]): ToolResult => {
+    const images: { type: 'image'; data: string; mimeType: string }[] = [];
+    const opened = deps.openStore({ write: false });
+    try {
+      for (const ref of refs.slice(0, MAX_INLINE_IMAGES)) {
+        const i = ref.indexOf('/');
+        if (i <= 0) continue;
+        const got = opened.store.getMediaBytes(ref.slice(0, i), ref.slice(i + 1));
+        if (got) images.push({ type: 'image', data: got.bytes.toString('base64'), mimeType: got.mimetype ?? 'image/jpeg' });
+      }
+    } finally {
+      opened.close();
+    }
+    deps.log?.('media_images', { count: images.length });
+    // ToolResult is typed text-only for the tests' convenience; MCP accepts image blocks here.
+    return { ...res, content: [...res.content, ...images] as unknown as ToolResult['content'] };
+  };
   const notLinked = (s: Json): boolean => s.link_status === undefined || s.link_status === 'unlinked' || s.link_status === 'logged_out';
   const pickFrom = (a: Record<string, unknown>, ...keys: string[]): Record<string, unknown> => {
     const o: Record<string, unknown> = {};
@@ -657,9 +719,11 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     });
 
   plain('whatsapp_read',
-    'Read stored WhatsApp data. action: "chats" (list chats with unreviewed counts), "messages" (one chat; needs chat), "search" (needs query; optional chat), "chat_info" (participants; needs chat). Local data only.',
+    'Read stored WhatsApp data. action: "chats" (list chats with unreviewed counts), "messages" (one chat; needs chat), "search" (needs query; optional chat; also matches image text), "chat_info" (participants; needs chat), "media" (images: OCR text, amount, date, ref, bank; optional chat/since/until, or refs). Local data only.',
     z.object({
-      action: z.enum(['chats', 'messages', 'search', 'chat_info']),
+      action: z.enum(['chats', 'messages', 'search', 'chat_info', 'media']),
+      refs: z.array(z.string()).max(MAX_MEDIA_REFS).optional().describe('media: chat_id/message_id'),
+      include_image: z.boolean().optional().describe('media+refs: attach picture (costly)'),
       chat: z.string().optional().describe('chat id or name'),
       query: z.string().optional(),
       since: z.string().optional().describe('ISO-8601 time or 7d / 12h'),
@@ -682,6 +746,12 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
         case 'search':
           need(a.query, '"query"');
           return inner('search_messages', { ...pickFrom(a, 'query', 'since', 'limit'), ...(a.chat ? { chats: [a.chat] } : {}) });
+        case 'media': {
+          const res = await inner('get_media', { ...pickFrom(a, 'refs', 'since', 'until', 'limit'), ...(a.chat ? { chats: [a.chat] } : {}) });
+          const refs = Array.isArray(a.refs) ? (a.refs as string[]) : [];
+          if (res.isError || a.include_image !== true || refs.length === 0) return res;
+          return withImages(res, refs);
+        }
         default:
           need(a.chat, '"chat"');
           return inner('get_chat_info', pickFrom(a, 'chat'));
@@ -689,7 +759,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     });
 
   plain('whatsapp_items',
-    'Follow-up items kept by wa-bridge. action: "save" (needs items), "list", "update" (needs id and status), "export" (needs format csv|json). Changes only wa-bridge\'s own records, never WhatsApp.',
+    'Follow-up items kept by ChatAI. action: "save" (needs items), "list", "update" (needs id and status), "export" (needs format csv|json). Changes only ChatAI\'s own records, never WhatsApp.',
     z.object({
       action: z.enum(['save', 'list', 'update', 'export']),
       items: z.array(z.object({
@@ -726,7 +796,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     });
 
   tool('whatsapp_choose_chats',
-    'Only when the user names specific chats to add or remove. If they want to add or remove chats without naming them, or to browse, call whatsapp_setup with screen "chats" instead. Newly added chats collect new messages only. Changes only wa-bridge settings, never WhatsApp.',
+    'Only when the user names specific chats to add or remove. If they want to add or remove chats without naming them, or to browse, call whatsapp_setup with screen "chats" instead. Newly added chats collect new messages only. Changes only chatai settings, never WhatsApp.',
     z.object({
       include: z.array(z.string()).optional().describe('chat names or ids to add'),
       exclude: z.array(z.string()).optional().describe('chat names or ids to remove'),

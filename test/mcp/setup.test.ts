@@ -89,7 +89,7 @@ describe('capability detection', () => {
       expect(tools.find((t) => t.name === n)?._meta?.ui?.visibility).toEqual(['app']);
     }
     const open = tools.find((t) => t.name === 'whatsapp_setup');
-    expect(open?._meta?.ui?.resourceUri).toBe('ui://wa-bridge/setup.html');
+    expect(open?._meta?.ui?.resourceUri).toBe('ui://chatai/setup.html');
     expect(open?._meta?.ui?.visibility).toBeUndefined();
     await c.close();
   });
@@ -163,7 +163,7 @@ describe('setup panel resource and app tools', () => {
     const f = fakeHost();
     h = harness({ getHost: () => f.host, readUiHtml: () => '<html><head><title>x</title></head><body>ui</body></html>' });
     const c = await connect(h.deps, UI_CAPS);
-    const res = await c.request('resources/read', { uri: 'ui://wa-bridge/setup.html' });
+    const res = await c.request('resources/read', { uri: 'ui://chatai/setup.html' });
     const item = res.result.contents[0];
     expect(item.mimeType).toBe('text/html;profile=mcp-app');
     expect(item.text).toContain(`window.__WA_NONCE__=${JSON.stringify(NONCE)}`);
@@ -204,7 +204,7 @@ describe('setup panel resource and app tools', () => {
     const f = fakeHost();
     h = harness({ getHost: () => f.host, readUiHtml: () => null });
     const c = await connect(h.deps, UI_CAPS);
-    const res = await c.request('resources/read', { uri: 'ui://wa-bridge/setup.html' });
+    const res = await c.request('resources/read', { uri: 'ui://chatai/setup.html' });
     expect(res.result.contents[0].text).toContain('not installed');
     await c.close();
   });
@@ -215,8 +215,8 @@ describe('per-chat notes', () => {
     h = harness();
     h.store.insertMessage(msg({ chatId: G1 }));
     h.store.insertMessage(msg({ chatId: G2 }));
-    fs.mkdirSync(path.join(h.dir, '.wa-bridge'), { recursive: true });
-    fs.writeFileSync(path.join(h.dir, '.wa-bridge', 'departments.yaml'), [
+    fs.mkdirSync(path.join(h.dir, '.chatai'), { recursive: true });
+    fs.writeFileSync(path.join(h.dir, '.chatai', 'departments.yaml'), [
       'chats:', '  - chat: "erp support 🚀"', '    department: ERP', '    note: "Supplier invoices"',
       `  - chat: "${G2}"`, '    note: "Roman Urdu: kal tak = urgent"',
     ].join('\n'));

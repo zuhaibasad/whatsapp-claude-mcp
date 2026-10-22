@@ -11,8 +11,8 @@ const { migrateLegacyDataDir } = await import(base + 'host/migrate.js');
 const { SqliteStore } = await import(base + 'store/index.js');
 
 const L = process.env.LOCALAPPDATA;
-const realVirtual = path.join(L, 'wa-bridge');
-const physical = path.join(L, 'Packages', 'Claude_pzs8sxrjxfjjc', 'LocalCache', 'Local', 'wa-bridge');
+const realVirtual = path.join(L, 'chatai');
+const physical = path.join(L, 'Packages', 'Claude_pzs8sxrjxfjjc', 'LocalCache', 'Local', 'chatai');
 const tmp = path.join(process.argv[2]);
 const legacy = path.join(tmp, 'legacy');
 const newDir = path.join(tmp, 'new');

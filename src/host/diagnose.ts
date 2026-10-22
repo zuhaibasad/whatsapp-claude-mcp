@@ -1,5 +1,5 @@
 // Health check ("diagnose") shared by the collector host, whatsapp_status {diagnose:true}, POST /api/diagnose and
-// `wa-bridge doctor`. Every detail/fix is plain language. Never includes keys, tokens, nonces, QR data or message text.
+// `chatai doctor`. Every detail/fix is plain language. Never includes keys, tokens, nonces, QR data or message text.
 import fs from 'node:fs';
 import path from 'node:path';
 import { SCHEMA_VERSION } from '../core/constants.js';
@@ -89,11 +89,11 @@ export function buildDiagnosis(input: DiagnoseInput): Diagnosis {
   // data folder
   const exists = fs.existsSync(paths.dataDir);
   if (!exists) {
-    checks.push(check('data_dir', false, 'The wa-bridge data folder does not exist yet.', 'Say "set up WhatsApp" to create it.'));
+    checks.push(check('data_dir', false, 'The ChatAI data folder does not exist yet.', 'Say "set up WhatsApp" to create it.'));
   } else if (isMsixRedirected(paths.dataDir)) {
     checks.push(check('data_dir', false,
       'The data folder is inside Claude Desktop\'s private package storage, so other programs (like Claude Code) will not see the same data.',
-      'Move to the default folder: set the data folder to your user folder (.wa-bridge) in the extension settings, or ask support.'));
+      'Move to the default folder: set the data folder to your user folder (.chatai) in the extension settings, or ask support.'));
   } else {
     checks.push(check('data_dir', true, `The data folder exists (${paths.dataDir}).`));
   }
@@ -136,7 +136,7 @@ export function buildDiagnosis(input: DiagnoseInput): Diagnosis {
   } else if (schema < SCHEMA_VERSION) {
     checks.push(check('schema', false, `The message database is on an older version (${schema}, expected ${SCHEMA_VERSION}).`, 'Restart Claude; it upgrades automatically and keeps a backup.'));
   } else {
-    checks.push(check('schema', false, `The message database is from a newer wa-bridge (version ${schema}, this one supports ${SCHEMA_VERSION}).`, 'Update the WhatsApp Bridge extension.'));
+    checks.push(check('schema', false, `The message database is from a newer ChatAI (version ${schema}, this one supports ${SCHEMA_VERSION}).`, 'Update the ChatAI for WhatsApp extension.'));
   }
 
   // collector
@@ -180,7 +180,7 @@ export function buildDiagnosis(input: DiagnoseInput): Diagnosis {
     const gb = free / (1024 ** 3);
     checks.push(check('disk', free >= LOW_DISK_BYTES,
       free >= 10 * 1024 ** 3 ? `${gb.toFixed(0)} GB free on the data drive.` : `${mb} MB free on the data drive.`,
-      'Free some space on this drive; wa-bridge needs room to store messages.'));
+      'Free some space on this drive; ChatAI needs room to store messages.'));
   }
 
   // backups

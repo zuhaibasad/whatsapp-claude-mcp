@@ -20,7 +20,7 @@ export async function statusCommand(opts: { project: string; json?: boolean }, i
   const paths = resolvePaths(opts.project);
   if (!isInitialised(paths)) {
     if (opts.json) io.out(JSON.stringify({ initialised: false }));
-    else io.out('Not initialised. Run: wa-bridge init');
+    else io.out('Not initialised. Run: chatai init');
     return 2;
   }
 
@@ -39,9 +39,9 @@ export async function statusCommand(opts: { project: string; json?: boolean }, i
     const linkStatus = account?.linkStatus ?? 'unlinked';
 
     const warnings: string[] = [];
-    if (linkStatus === 'logged_out') warnings.push('WhatsApp logged this device out. Run: wa-bridge unlink, then wa-bridge link');
-    else if (linkStatus === 'unlinked') warnings.push('No account linked. Run: wa-bridge link');
-    if (!daemonRunning && linkStatus !== 'unlinked') warnings.push('The daemon is not running. Run: wa-bridge daemon start');
+    if (linkStatus === 'logged_out') warnings.push('WhatsApp logged this device out. Run: chatai unlink, then chatai link');
+    else if (linkStatus === 'unlinked') warnings.push('No account linked. Run: chatai link');
+    if (!daemonRunning && linkStatus !== 'unlinked') warnings.push('The daemon is not running. Run: chatai daemon start');
     if (daemonRunning && lastSync !== null && (nowSec - lastSync) / 60 > STALE_SYNC_MIN) {
       warnings.push(`No sync for more than ${STALE_SYNC_MIN} minutes.`);
     }

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="ChatAI logo">
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fde68a"/>
+      <stop offset="1" stop-color="#f59e0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#tile)"/>
+  <!-- chat bubble with a tail at the lower left -->
+  <path d="M256 104c-92.8 0-168 62.7-168 140 0 42.1 22.3 79.9 57.6 105.6L128 408l70.4-31.6c18.2 4.9 37.6 7.6 57.6 7.6 92.8 0 168-62.7 168-140S348.8 104 256 104z" fill="#ffffff"/>
+  <!-- three lines of text inside the bubble -->
+  <rect x="168" y="200" width="176" height="22" rx="11" fill="#c7d2fe"/>
+  <rect x="168" y="240" width="132" height="22" rx="11" fill="#c7d2fe"/>
+  <rect x="168" y="280" width="96" height="22" rx="11" fill="#c7d2fe"/>
+  <!-- AI sparkle overlapping the top right of the bubble -->
+  <path d="M392 72c6 36 20 50 56 56-36 6-50 20-56 56-6-36-20-50-56-56 36-6 50-20 56-56z" fill="url(#spark)" stroke="#ffffff" stroke-width="8" stroke-linejoin="round"/>
+</svg>

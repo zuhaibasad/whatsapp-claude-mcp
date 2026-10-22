@@ -145,12 +145,12 @@ const renderers: Record<Screen, () => void> = {
     check.addEventListener('change', () => { accept.disabled = !check.checked; });
     show(
       h('h1', {}, 'Before you start'),
-      h('p', { class: 'lead' }, 'wa-bridge lets Claude read your WhatsApp chats. Please read these points first.'),
+      h('p', { class: 'lead' }, 'ChatAI for WhatsApp lets Claude read your WhatsApp chats. Please read these points first.'),
       h('ul', { class: 'points' },
         h('li', {}, h('strong', {}, 'This is not an official WhatsApp feature. '), 'It links to your account like an extra device. This is against WhatsApp\'s rules, and your number could be restricted or banned.'),
         h('li', {}, h('strong', {}, 'Other people did not agree. '), 'The people in your chats have not agreed to an AI reading their messages.'),
         h('li', {}, h('strong', {}, 'Messages are sent to Anthropic. '), 'When Claude reads a message, the text goes to Anthropic.'),
-        h('li', {}, h('strong', {}, 'It only reads. '), 'wa-bridge never sends messages, never marks them as read, and never shows you as online.'),
+        h('li', {}, h('strong', {}, 'It only reads. '), 'ChatAI never sends messages, never marks them as read, and never shows you as online.'),
         h('li', {}, h('strong', {}, 'Your data stays here. '), 'Everything is kept on this computer, encrypted.'),
       ),
       h('label', { class: 'check' }, check, h('span', {}, 'I understand and want to continue')),
@@ -207,13 +207,13 @@ const renderers: Record<Screen, () => void> = {
     const finish = (): void => { permissionsPending = false; permissionsSeen = true; closeVariant = entryChats; shown = null; route(); };
     const tip = host.kind === 'app'
       ? h('p', { class: 'lead' }, 'Claude asks before using each WhatsApp tool for the first time. To stop that: open ',
-        h('strong', {}, 'Settings → Extensions → WhatsApp Bridge'), ' and set the tools to ', h('strong', {}, 'Always allow'), '.')
-      : h('p', { class: 'lead' }, 'When Claude asks to use a wa-bridge tool, choose ', h('em', {}, 'Yes, and don\'t ask again'), '.');
+        h('strong', {}, 'Settings → Extensions → ChatAI for WhatsApp'), ' and set the tools to ', h('strong', {}, 'Always allow'), '.')
+      : h('p', { class: 'lead' }, 'When Claude asks to use a ChatAI tool, choose ', h('em', {}, 'Yes, and don\'t ask again'), '.');
     show(
       h('div', { class: 'tick', 'aria-hidden': 'true' }, '🔔'),
       h('h1', {}, 'One last thing: stop the permission pop-ups'),
       tip,
-      h('p', { class: 'muted' }, 'wa-bridge can only read; it never sends anything.'),
+      h('p', { class: 'muted' }, 'ChatAI can only read; it never sends anything.'),
       h('div', { class: 'actions split' }, button('Skip', finish, 'link'), button('Got it', finish)),
     );
   },
@@ -280,7 +280,7 @@ const renderers: Record<Screen, () => void> = {
     });
     show(
       h('h1', {}, 'Disconnect WhatsApp?'),
-      h('p', { class: 'lead' }, `This removes wa-bridge from the linked devices of ${accountLabel(state ?? { account: null })}. Claude will no longer see new messages.`),
+      h('p', { class: 'lead' }, `This removes ChatAI from the linked devices of ${accountLabel(state ?? { account: null })}. Claude will no longer see new messages.`),
       h('div', { class: 'choices', role: 'radiogroup', 'aria-label': 'What should happen to your data?' }, ...options),
       warn,
       h('div', { class: 'actions split' }, button('Cancel', () => {

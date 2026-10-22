@@ -37,14 +37,14 @@ describe('init', () => {
     await initCommand({ project }, fakeIo([]), deps); // no prompt needed
     expect(deps.keyStore(project).get()?.toString('hex')).toBe(key);
     const gi = fs.readFileSync(path.join(project, '.gitignore'), 'utf8');
-    expect(gi).toBe('node_modules\n.wa-bridge/\n');
+    expect(gi).toBe('node_modules\n.chatai/\n');
   });
   it('--accept without env is refused; with env works', async () => {
     const deps = fakeDeps();
     await expect(initCommand({ project, accept: true, env: {} }, fakeIo(), deps)).rejects.toBeInstanceOf(CliError);
-    await expect(initCommand({ project, accept: true, env: { WA_BRIDGE_ACCEPT_RISK: 'yes' } }, fakeIo(), deps)).rejects.toBeInstanceOf(CliError);
+    await expect(initCommand({ project, accept: true, env: { CHATAI_ACCEPT_RISK: 'yes' } }, fakeIo(), deps)).rejects.toBeInstanceOf(CliError);
     const io = fakeIo();
-    expect(await initCommand({ project, accept: true, env: { WA_BRIDGE_ACCEPT_RISK: 'I accept' } }, io, deps)).toBe(0);
+    expect(await initCommand({ project, accept: true, env: { CHATAI_ACCEPT_RISK: 'I accept' } }, io, deps)).toBe(0);
     expect(io.text()).toContain('Terms of Service');
   });
 });

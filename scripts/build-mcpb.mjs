@@ -1,4 +1,4 @@
-// Builds build/wa-bridge-<version>.mcpb for Claude Desktop (win32-x64).
+// Builds build/chatai-<version>.mcpb for Claude Desktop (win32-x64).
 // Steps: npm run build -> stage app + license files -> npm ci --omit=dev in the stage -> prune -> mcpb pack.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const stage = path.join(root, 'build', 'mcpb');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const out = path.join(root, 'build', `wa-bridge-${pkg.version}.mcpb`);
+const out = path.join(root, 'build', `chatai-${pkg.version}.mcpb`);
 const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
@@ -62,6 +62,16 @@ if (fs.existsSync(bs)) {
   if (fs.existsSync(pre)) for (const f of fs.readdirSync(pre)) if (!f.startsWith('win32-x64')) rm(path.join(pre, f));
 }
 rm(path.join(nm, 'node-addon-api'));
+// OCR: Node loads only the *-lstm cores (wasm file next to the .js loader) and we use the compact best_int English data.
+const tcore = path.join(nm, 'tesseract.js-core');
+if (fs.existsSync(tcore)) {
+  for (const f of fs.readdirSync(tcore)) {
+    if (!/^tesseract-core/.test(f)) continue;
+    if (!/-lstm\.(js|wasm)$/.test(f)) rm(path.join(tcore, f));
+  }
+}
+rm(path.join(nm, '@tesseract.js-data', 'eng', '4.0.0'));
+rm(path.join(nm, 'zlibjs')); // browser-only gunzip; the Node worker uses node:zlib
 // Other platforms' optional native packages, if any slipped in.
 for (const scope of fs.existsSync(nm) ? fs.readdirSync(nm).filter((n) => n.startsWith('@')) : []) {
   for (const n of fs.readdirSync(path.join(nm, scope))) {

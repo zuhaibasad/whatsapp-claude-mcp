@@ -69,14 +69,14 @@ afterEach(() => {
 
 describe('runDaemon', () => {
   it('refuses to start without a key, releasing the lock', async () => {
-    await expect(runDaemon({ projectRoot: dir, deps: { ...deps(), keyStore: noKeyStore } })).rejects.toThrow(/wa-bridge init/);
+    await expect(runDaemon({ projectRoot: dir, deps: { ...deps(), keyStore: noKeyStore } })).rejects.toThrow(/chatai init/);
     expect(fs.existsSync(resolvePaths(dir).lockFile)).toBe(false);
   });
 
   it('refuses to start when not linked', async () => {
     fs.rmSync(resolvePaths(dir).authDb);
     await seedAuth(false);
-    await expect(runDaemon({ projectRoot: dir, deps: deps() })).rejects.toThrow(/wa-bridge link/);
+    await expect(runDaemon({ projectRoot: dir, deps: deps() })).rejects.toThrow(/chatai link/);
     expect(fs.existsSync(resolvePaths(dir).lockFile)).toBe(false);
     expect(client.connect).not.toHaveBeenCalled();
   });

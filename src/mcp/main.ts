@@ -21,7 +21,7 @@ export function realDeps(target: string | DataPaths, keyStore?: (root: string) =
   } catch {
     /* config problems are reported per call */
   }
-  const logger = createLogger({ level, file: paths.logFile, name: 'wa-bridge-mcp' });
+  const logger = createLogger({ level, file: paths.logFile, name: 'chatai-mcp' });
   const keys = keyStore ?? createMasterKeyStore;
   return {
     projectRoot: paths.projectRoot,
@@ -86,7 +86,7 @@ function argValue(argv: string[], flag: string): string | undefined {
   return i >= 0 && argv[i + 1] ? (argv[i + 1] as string) : undefined;
 }
 
-/** `--data-dir <dir>` = explicit user-style folder; `--project <dir>` = development (<dir>/.wa-bridge); default = per-user folder. */
+/** `--data-dir <dir>` = explicit user-style folder; `--project <dir>` = development (<dir>/.chatai); default = per-user folder. */
 export function pathsFromArgs(argv: string[]): DataPaths {
   const dataDir = argValue(argv, '--data-dir');
   if (dataDir) return resolveUserPaths(dataDir);
@@ -98,7 +98,7 @@ export function pathsFromArgs(argv: string[]): DataPaths {
 const entry = process.argv[1];
 if (entry && import.meta.url === pathToFileURL(fs.realpathSync(entry)).href) {
   runStdio(pathsFromArgs(process.argv), undefined, { withHost: true }).catch((e: unknown) => {
-    process.stderr.write(`wa-bridge mcp: ${e instanceof Error ? e.message : String(e)}\n`);
+    process.stderr.write(`chatai mcp: ${e instanceof Error ? e.message : String(e)}\n`);
     process.exitCode = 1;
   });
 }

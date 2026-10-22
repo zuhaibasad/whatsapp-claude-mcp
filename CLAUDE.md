@@ -1,4 +1,4 @@
-# wa-bridge: operating notes for Claude
+# ChatAI for WhatsApp (repo: wa-bridge): operating notes for Claude
 
 A read-only WhatsApp bridge for Claude Desktop (`.mcpb`) and Claude Code. TypeScript/Node, Windows first. **`docs/` is the Obsidian vault and the shared memory between sessions.**
 

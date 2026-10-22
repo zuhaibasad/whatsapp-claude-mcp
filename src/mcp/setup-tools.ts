@@ -11,11 +11,11 @@ import type { HostBridge } from './host.js';
 import type { McpDeps, ToolHandler, ToolResult } from './server.js';
 import { text } from './server.js';
 
-export const SETUP_URI = 'ui://wa-bridge/setup.html';
+export const SETUP_URI = 'ui://chatai/setup.html';
 const APP_ONLY = { ui: { resourceUri: SETUP_URI, visibility: ['app'] } };
 
-const PLACEHOLDER_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>wa-bridge setup</title></head>
-<body><p>The setup panel is not installed in this build. Run <code>wa-bridge link</code> in a terminal, or reinstall wa-bridge.</p></body></html>`;
+const PLACEHOLDER_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>ChatAI setup</title></head>
+<body><p>The setup panel is not installed in this build. Run <code>chatai link</code> in a terminal, or reinstall ChatAI.</p></body></html>`;
 
 type PlainFn = (
   name: string,
@@ -59,7 +59,7 @@ export function registerSetupUi(ctx: SetupUiCtx): void {
   const uiOn = (): boolean => ctx.uiSupported ?? getUiCapability(server.server.getClientCapabilities()) !== undefined;
 
   // The panel. A fresh nonce is minted on every read and embedded only in this HTML.
-  registerAppResource(server, 'WhatsApp setup panel', SETUP_URI, { description: 'Link WhatsApp and choose which chats wa-bridge reads.' },
+  registerAppResource(server, 'WhatsApp setup panel', SETUP_URI, { description: 'Link WhatsApp and choose which chats ChatAI reads.' },
     async () => {
       const bridge = await needHost();
       const nonce = await bridge.mintNonce();

@@ -63,7 +63,7 @@ export async function itemStatusCommand(
   const { store, close } = openStore(resolvePaths(opts.project), deps, { write: true });
   try {
     const it = store.updateItem(n, status);
-    if (!it) throw new CliError(`No item with id ${n}. See: wa-bridge items`);
+    if (!it) throw new CliError(`No item with id ${n}. See: chatai items`);
     io.out(`Item ${it.id} marked ${it.status}.`);
     return 0;
   } finally {

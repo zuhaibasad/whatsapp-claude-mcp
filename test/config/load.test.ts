@@ -37,7 +37,7 @@ describe('loadConfig', () => {
       denylist: [],
       myNames: [],
       maxTextChars: 2000,
-      logLevel: 'info',
+      logLevel: 'info', mediaDownload: true, mediaOcr: true, mediaMaxMb: 500,
     });
     expect(warnings.some((w) => w.includes('config.yaml') && /not found/.test(w))).toBe(true);
   });
@@ -66,7 +66,7 @@ describe('loadConfig', () => {
       denylist: ['Spam Group'],
       myNames: ['Zuhaib', 'ZA'],
       maxTextChars: 500,
-      logLevel: 'debug',
+      logLevel: 'debug', mediaDownload: true, mediaOcr: true, mediaMaxMb: 500,
     });
     expect(warnings).toEqual([]);
   });

@@ -101,9 +101,9 @@ describe('encrypted db', () => {
   });
 });
 
-describe.skipIf(process.env.WA_BRIDGE_TEST_KEYCHAIN !== '1')('real keychain', () => {
+describe.skipIf(process.env.CHATAI_TEST_KEYCHAIN !== '1')('real keychain', () => {
   it('stores and retrieves via OS keychain', () => {
-    const store = createMasterKeyStore(dir, napiKeyringBackend(), 'wa-bridge-test');
+    const store = createMasterKeyStore(dir, napiKeyringBackend(), 'chatai-test');
     try {
       expect(store.get()).toBeNull();
       const k = store.create();

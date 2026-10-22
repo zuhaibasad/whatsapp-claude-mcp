@@ -29,7 +29,7 @@ export function createHostClient(paths: DataPaths, opts: HostClientOptions = {})
 
   async function call<T>(op: string, body: unknown, extra: { headers?: Record<string, string>; timeoutMs?: number } = {}): Promise<T> {
     const info = readHostInfo(paths);
-    if (!info) throw new HostUnavailableError('the wa-bridge collector is not running (no service info)');
+    if (!info) throw new HostUnavailableError('the chatai collector is not running (no service info)');
     let token: string | null;
     try {
       token = readControlToken(paths, keyring);

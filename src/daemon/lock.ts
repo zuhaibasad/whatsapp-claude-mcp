@@ -4,7 +4,7 @@ export class DaemonAlreadyRunningError extends Error {
   readonly pid: number;
 
   constructor(pid: number) {
-    super(`wa-bridge daemon is already running (pid ${pid})`);
+    super(`chatai daemon is already running (pid ${pid})`);
     this.name = 'DaemonAlreadyRunningError';
     this.pid = pid;
   }

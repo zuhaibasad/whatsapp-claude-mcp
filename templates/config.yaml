@@ -1,4 +1,4 @@
-# wa-bridge settings.
+# ChatAI for WhatsApp settings.
 # Keys use snake_case. Changes are picked up automatically within about a minute.
 
 # How many days of messages to keep in the local store. Older messages are deleted.
@@ -34,6 +34,15 @@ my_names: []
 
 # Longest message text kept. Longer text is cut short.
 max_text_chars: 2000
+
+# Images (bills, payment screenshots) in selected chats: download them, stored encrypted on this PC.
+media_download: true
+
+# Read the text in those images on this PC (tesseract OCR), so Claude gets text instead of the image.
+media_ocr: true
+
+# Most image storage in MB. The oldest images are dropped first; their OCR text is kept.
+media_max_mb: 500
 
 # How much the daemon writes to its log: error, warn, info or debug.
 log_level: info

@@ -2,7 +2,7 @@
 // contact cards) are placed in their own JSON fields and never concatenated into prose that the tool authors.
 // The result carries CONTENT_NOTICE so Claude treats them as data, not instructions.
 import type { Store } from '../core/contracts.js';
-import type { StoredMessage } from '../core/types.js';
+import type { MediaInfo, StoredMessage } from '../core/types.js';
 import { isoInZone } from '../export/index.js';
 
 export type Json = Record<string, unknown>;
@@ -15,6 +15,18 @@ export const QUOTE_MAX_CHARS = 300;
 /** Max earlier-context messages per chat in a brief. */
 export const CONTEXT_BEFORE_MAX = 3;
 export const MAX_RESPONSE_TEXT_CHARS = 80_000;
+/** Max chars of image OCR text inline in message lists (full text via whatsapp_read action media). */
+export const OCR_INLINE_CHARS = 300;
+
+/** OCR summary of an image for tool output. Text and fields come from an image someone sent: untrusted data. */
+export function ocrJson(info: MediaInfo, maxText = OCR_INLINE_CHARS): Json {
+  const out: Json = { status: info.status };
+  if (info.ocrFields && Object.keys(info.ocrFields).length > 0) out.fields = info.ocrFields;
+  if (info.ocrText) out.text = clip(info.ocrText, maxText);
+  if (info.ocrConfidence !== null) out.confidence = info.ocrConfidence;
+  if (info.status === 'done' && !info.ocrText) out.note = 'no readable text found';
+  return out;
+}
 
 /** Truncates by code point so emoji and Urdu letters are never split. */
 export function clip(text: string, max: number): string {
@@ -53,7 +65,9 @@ function replyTo(m: StoredMessage, store: Pick<Store, 'getMessage'>): Json | nul
   };
 }
 
-export function messageJson(m: StoredMessage, c: FormatCtx, store: Pick<Store, 'getMessage'>): Json {
+export function messageJson(
+  m: StoredMessage, c: FormatCtx, store: Pick<Store, 'getMessage'> & Partial<Pick<Store, 'getMediaInfo'>>,
+): Json {
   const out: Json = {
     ref: `${m.chatId}/${m.id}`,
     ts: isoInZone(m.ts, c.config.timezone),
@@ -67,6 +81,8 @@ export function messageJson(m: StoredMessage, c: FormatCtx, store: Pick<Store, '
   };
   if (!m.deleted && m.extra?.location) out.location = m.extra.location;
   if (!m.deleted && m.extra?.contacts) out.contacts = m.extra.contacts;
+  const info = !m.deleted && m.hasMedia ? store.getMediaInfo?.(m.chatId, m.id) : null;
+  if (info) out.image = ocrJson(info);
   return out;
 }
 
@@ -75,6 +91,7 @@ export function messageWeight(m: StoredMessage, c: FormatCtx): number {
   let len = Math.min([...(m.text ?? '')].length, c.config.maxTextChars) + 80;
   len += Math.min([...(m.quotedText ?? '')].length, QUOTE_MAX_CHARS);
   if (m.extra) len += JSON.stringify(m.extra).length;
+  if (m.mediaType === 'image') len += OCR_INLINE_CHARS + 200;
   return len;
 }
 

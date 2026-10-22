@@ -1,5 +1,5 @@
-// One-time copy of the old Windows data folder (%LOCALAPPDATA%\wa-bridge, possibly MSIX-redirected) into the
-// current default (%USERPROFILE%\.wa-bridge). Copies, never moves; the old folder stays as a backup.
+// One-time copy of the old Windows data folder (%LOCALAPPDATA%\chatai, possibly MSIX-redirected) into the
+// current default (%USERPROFILE%\.chatai). Copies, never moves; the old folder stays as a backup.
 import fs from 'node:fs';
 import path from 'node:path';
 import { KEYCHAIN_SERVICE } from '../core/constants.js';
@@ -72,7 +72,7 @@ function verifyOpens(file: string, key: Buffer): void {
  * Copies store.db, auth.db, config yaml files and exports/ from the old data folder to `paths.dataDir`,
  * and the keychain master key to the new folder's keychain account. Idempotent; never overwrites an
  * existing new store. Never throws (a failure is logged and the app starts with a fresh folder).
- * Only runs for the per-user default folder on Windows (not with WA_BRIDGE_HOME or project mode).
+ * Only runs for the per-user default folder on Windows (not with CHATAI_HOME or project mode).
  */
 export function migrateLegacyDataDir(paths: DataPaths, opts: MigrateOpts): MigrateResult {
   const env = opts.env ?? process.env;
@@ -82,7 +82,7 @@ export function migrateLegacyDataDir(paths: DataPaths, opts: MigrateOpts): Migra
   let legacy: string | null;
   if (opts.legacyDir !== undefined) {
     legacy = opts.legacyDir;
-  } else if (platform !== 'win32' || env['WA_BRIDGE_HOME'] || newDir !== path.resolve(defaultDataDir(env, platform))) {
+  } else if (platform !== 'win32' || env['CHATAI_HOME'] || newDir !== path.resolve(defaultDataDir(env, platform))) {
     legacy = null;
   } else {
     legacy = legacyWindowsDataDir(env);

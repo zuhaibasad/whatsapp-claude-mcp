@@ -136,7 +136,46 @@ ALTER TABLE messages ADD COLUMN quoted_sender_name TEXT;
 ALTER TABLE messages ADD COLUMN extra TEXT;
 `;
 
-/** Creates/updates the schema (v1, v2, v3). Idempotent. */
+/** v3 -> v4: downloaded images (bytes live in the encrypted DB) and their local OCR text, searchable. */
+const UPGRADE_V4 = `
+CREATE TABLE IF NOT EXISTS media (
+  chat_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  ts INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  mimetype TEXT,
+  file_length INTEGER,
+  media_key TEXT,
+  direct_path TEXT,
+  url TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  next_try_at INTEGER NOT NULL DEFAULT 0,
+  bytes BLOB,
+  size INTEGER,
+  ocr_text TEXT,
+  ocr_fields TEXT,
+  ocr_confidence REAL,
+  PRIMARY KEY (chat_id, message_id)
+);
+CREATE INDEX IF NOT EXISTS idx_media_status ON media (status, ts);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS media_fts USING fts5(
+  ocr_text, content='media', content_rowid='rowid', tokenize="unicode61 remove_diacritics 2"
+);
+CREATE TRIGGER IF NOT EXISTS media_ai AFTER INSERT ON media BEGIN
+  INSERT INTO media_fts(rowid, ocr_text) VALUES (new.rowid, new.ocr_text);
+END;
+CREATE TRIGGER IF NOT EXISTS media_ad AFTER DELETE ON media BEGIN
+  INSERT INTO media_fts(media_fts, rowid, ocr_text) VALUES ('delete', old.rowid, old.ocr_text);
+END;
+CREATE TRIGGER IF NOT EXISTS media_au AFTER UPDATE OF ocr_text ON media BEGIN
+  INSERT INTO media_fts(media_fts, rowid, ocr_text) VALUES ('delete', old.rowid, old.ocr_text);
+  INSERT INTO media_fts(rowid, ocr_text) VALUES (new.rowid, new.ocr_text);
+END;
+`;
+
+/** Creates/updates the schema (v1..v4). Idempotent. */
 export function migrate(db: Db): void {
   db.transaction(() => {
     db.exec(SCHEMA_V1);
@@ -150,6 +189,10 @@ export function migrate(db: Db): void {
     if (cur < 3) {
       db.exec(UPGRADE_V3);
       db.prepare("UPDATE meta SET value = '3' WHERE key = 'schema_version'").run();
+    }
+    if (cur < 4) {
+      db.exec(UPGRADE_V4);
+      db.prepare("UPDATE meta SET value = '4' WHERE key = 'schema_version'").run();
     }
   })();
 }

@@ -17,8 +17,8 @@ export interface ControlServer {
 }
 
 const PLACEHOLDER_HTML =
-  '<!doctype html><html><head><meta charset="utf-8"><title>wa-bridge setup</title></head>' +
-  '<body><p>The wa-bridge setup page has not been built yet.</p></body></html>';
+  '<!doctype html><html><head><meta charset="utf-8"><title>ChatAI setup</title></head>' +
+  '<body><p>The ChatAI setup page has not been built yet.</p></body></html>';
 
 function uiCandidates(deps: HostDeps): string[] {
   if (deps.uiHtmlPath) return [deps.uiHtmlPath];

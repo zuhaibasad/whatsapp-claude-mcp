@@ -59,6 +59,46 @@ export interface MessageInput {
   quotedSenderName?: string | null;
   /** Location / contact card payloads, stored as JSON in messages.extra. Untrusted data. */
   extra?: MessageExtra | null;
+  /** Download reference for an image (WhatsApp CDN). Queued for local download + OCR when the message is stored. */
+  media?: MediaRef | null;
+}
+
+/** What is needed to fetch and decrypt one media file from WhatsApp's CDN. No socket involved. */
+export interface MediaRef {
+  kind: 'image';
+  mimetype: string | null;
+  fileLength: number | null;
+  /** base64 */
+  mediaKey: string;
+  directPath: string | null;
+  url: string | null;
+}
+
+export type MediaStatus = 'pending' | 'done' | 'expired' | 'failed' | 'too_large';
+
+/** Fields pulled from OCR text by pattern matching. Untrusted data. */
+export interface OcrFields {
+  amount?: string;
+  amounts?: string[];
+  currency?: string;
+  date?: string;
+  reference?: string;
+  bank?: string;
+}
+
+/** Media row without the bytes. */
+export interface MediaInfo {
+  chatId: string;
+  messageId: string;
+  ts: number;
+  kind: string;
+  mimetype: string | null;
+  status: MediaStatus;
+  size: number | null;
+  hasBytes: boolean;
+  ocrText: string | null;
+  ocrFields: OcrFields | null;
+  ocrConfidence: number | null;
 }
 
 export interface MessageExtra {

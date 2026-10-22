@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { clip, ToolError } from '../../src/mcp/server.js';
+import { clip, createServer, ToolError } from '../../src/mcp/server.js';
 import { G1, G2, T0, harness, msg, type Harness } from './helpers.js';
 
 let h: Harness;
@@ -148,7 +148,7 @@ describe('get_status', () => {
     h2.cleanup();
   });
   it('does not fail when not initialised', async () => {
-    const h2 = harness({ openStore: () => { throw new ToolError('not initialised: run `wa-bridge init`'); } });
+    const h2 = harness({ openStore: () => { throw new ToolError('not initialised: run `chatai init`'); } });
     const r = await h2.call('get_status');
     expect(r.isError).toBe(false);
     expect(r.json.warnings[0]).toContain('not initialised');
@@ -158,9 +158,9 @@ describe('get_status', () => {
 
 describe('errors', () => {
   it('returns short actionable errors, no stack traces', async () => {
-    const h2 = harness({ openStore: () => { throw new ToolError('not initialised: run `wa-bridge init`'); } });
+    const h2 = harness({ openStore: () => { throw new ToolError('not initialised: run `chatai init`'); } });
     const r = await h2.call('list_chats');
-    expect(r).toMatchObject({ isError: true, text: 'not initialised: run `wa-bridge init`' });
+    expect(r).toMatchObject({ isError: true, text: 'not initialised: run `chatai init`' });
     h2.cleanup();
   });
   it('rejects bad arguments and bad times', async () => {
@@ -204,7 +204,7 @@ describe('export_items', () => {
   it('writes csv with BOM at the default path', async () => {
     const r = await h.call('export_items', { format: 'csv' });
     expect(r.json.count).toBe(1);
-    expect(r.json.path).toMatch(/^\.wa-bridge\/exports\/items-\d{4}-\d\d-\d\d\.csv$/);
+    expect(r.json.path).toMatch(/^\.chatai\/exports\/items-\d{4}-\d\d-\d\d\.csv$/);
     const raw = fs.readFileSync(path.join(h.dir, r.json.path), 'utf8');
     expect(raw.charCodeAt(0)).toBe(0xfeff);
     expect(raw).toContain('"Fix ""login"", urgent\nدوبارہ دیکھیں"');
@@ -242,5 +242,38 @@ describe('clip', () => {
   it('never splits emoji', () => {
     expect(clip('🚀🚀🚀', 2)).toBe('🚀🚀… [truncated]');
     expect(clip('abc', 5)).toBe('abc');
+  });
+});
+
+describe('whatsapp_read action media', () => {
+  const ref = { kind: 'image' as const, mimetype: 'image/jpeg', fileLength: 10, mediaKey: 'a2V5', directPath: '/p', url: null };
+  it('lists images with OCR fields, shows them on messages, and attaches the image only on request', async () => {
+    const h = harness();
+    try {
+      h.store.insertMessage(msg({ id: 'img1', text: null, hasMedia: true, mediaType: 'image', media: ref }));
+      h.store.insertMessage(msg({ id: 'img2', text: null, hasMedia: true, mediaType: 'image', media: ref }));
+      h.store.saveMediaResult(G1, 'img1', { status: 'done', bytes: Buffer.from('jpg'), ocrText: 'Total PKR 1,500', ocrFields: { amount: 'PKR 1,500' }, ocrConfidence: 0.9 });
+
+      const list = await h.call('whatsapp_read', { action: 'media', chat: G1 });
+      expect(list.json.content_notice).toBeTruthy();
+      expect(list.json.images.map((i: { ref: string }) => i.ref)).toEqual([`${G1}/img2`, `${G1}/img1`]);
+      expect(list.json.images[1].image).toMatchObject({ status: 'done', fields: { amount: 'PKR 1,500' }, confidence: 0.9 });
+      expect(list.json.note).toMatch(/still being downloaded/);
+
+      const msgs = await h.call('whatsapp_read', { action: 'messages', chat: G1 });
+      expect(msgs.json.messages.find((m: { ref: string }) => m.ref === `${G1}/img1`).image.text).toBe('Total PKR 1,500');
+
+      const { handlers } = createServer(h.deps); // raw result: the harness only keeps the text block
+      const withImg = await handlers.get('whatsapp_read')!({ action: 'media', refs: [`${G1}/img1`, `${G1}/nope`], include_image: true });
+      const blocks = withImg.content as unknown as { type: string; data?: string; text?: string }[];
+      expect(blocks.map((b) => b.type)).toEqual(['text', 'image']);
+      expect(Buffer.from(blocks[1]?.data ?? '', 'base64').toString()).toBe('jpg');
+      expect(JSON.parse(blocks[0]?.text ?? "{}").images[1].error).toMatch(/no image/);
+
+      const noImg = await h.call('whatsapp_read', { action: 'media', refs: [`${G1}/img1`] });
+      expect(noImg.json.images[0].image.text).toBe('Total PKR 1,500');
+    } finally {
+      h.cleanup();
+    }
   });
 });

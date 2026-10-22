@@ -26,11 +26,11 @@ export async function linkCommand(opts: { project: string }, io: Io, deps: CliDe
       },
     });
     io.out(`Linked: ${res.id}${res.pushName ? ` (${res.pushName})` : ''}`);
-    io.out('Start the daemon: wa-bridge daemon start');
+    io.out('Start the daemon: chatai daemon start');
     return 0;
   } catch (e) {
     if (deps.isAlreadyLinkedError(e)) {
-      io.out('Already linked. To link a different account run: wa-bridge unlink');
+      io.out('Already linked. To link a different account run: chatai unlink');
       return 0;
     }
     throw e instanceof Error ? new CliError(e.message) : e;

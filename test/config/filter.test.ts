@@ -13,7 +13,7 @@ function cfg(over: Partial<Config> = {}): Config {
     denylist: [],
     myNames: [],
     maxTextChars: 2000,
-    logLevel: 'info',
+    logLevel: 'info', mediaDownload: true, mediaOcr: true, mediaMaxMb: 500,
     ...over,
   };
 }

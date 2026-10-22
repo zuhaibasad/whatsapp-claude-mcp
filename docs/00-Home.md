@@ -1,9 +1,9 @@
 ---
 type: home
-tags: [wa-bridge, index]
+tags: [chatai, index]
 ---
 
-# wa-bridge vault
+# ChatAI for WhatsApp vault
 
 A read-only WhatsApp bridge for Claude Desktop and Claude Code. This `docs/` folder is the Obsidian vault and the memory shared between sessions.
 

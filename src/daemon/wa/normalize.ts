@@ -2,7 +2,7 @@
 import { proto } from 'baileys';
 import type { WAMessage } from 'baileys';
 import type { RawMessage } from '../../core/contracts.js';
-import type { MessageExtra } from '../../core/types.js';
+import type { MediaRef, MessageExtra } from '../../core/types.js';
 
 type Content = proto.IMessage;
 type EditResult = { chatId: string; messageId: string; newText: string };
@@ -70,6 +70,21 @@ const MEDIA_KINDS: [keyof Content, string][] = [
 function mediaTypeOf(c: Content): string | null {
   for (const [k, name] of MEDIA_KINDS) if (c[k]) return name;
   return null;
+}
+
+/** Download reference for an image (or a document that is an image). Null when keys are missing. */
+function mediaRefOf(c: Content): MediaRef | null {
+  const doc = c.documentMessage && (c.documentMessage.mimetype ?? '').startsWith('image/') ? c.documentMessage : null;
+  const im = c.imageMessage ?? doc;
+  if (!im?.mediaKey || im.mediaKey.length === 0 || (!im.directPath && !im.url)) return null;
+  return {
+    kind: 'image',
+    mimetype: nonEmpty(im.mimetype),
+    fileLength: im.fileLength === null || im.fileLength === undefined ? null : toNumber(im.fileLength),
+    mediaKey: Buffer.from(im.mediaKey).toString('base64'),
+    directPath: nonEmpty(im.directPath),
+    url: nonEmpty(im.url),
+  };
 }
 
 function contextInfoOf(c: Content): proto.IContextInfo | null {
@@ -213,6 +228,7 @@ export function normalizeMessage(m: WAMessage, meId: string): RawMessage | null 
     isFromMe: !!m.key.fromMe,
     hasMedia: mediaType !== null,
     mediaType,
+    media: mediaRefOf(content),
   };
 }
 

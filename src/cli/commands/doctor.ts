@@ -4,7 +4,7 @@ import type { CliDeps } from '../deps.js';
 import type { Io } from '../io.js';
 import { openStore } from '../open.js';
 
-/** `wa-bridge doctor`: prints the same health checks as whatsapp_status {diagnose:true}. No secrets, no message text. */
+/** `chatai doctor`: prints the same health checks as whatsapp_status {diagnose:true}. No secrets, no message text. */
 export async function doctorCommand(opts: { project: string; json?: boolean }, io: Io, deps: CliDeps): Promise<number> {
   const paths = resolvePaths(opts.project);
   let keyPresent: boolean | null;
@@ -27,7 +27,7 @@ export async function doctorCommand(opts: { project: string; json?: boolean }, i
   try {
     const d = buildDiagnosis({
       paths,
-      version: '0.2.0',
+      version: '0.3.0',
       now: deps.now,
       keyPresent,
       meta,
@@ -37,7 +37,7 @@ export async function doctorCommand(opts: { project: string; json?: boolean }, i
     if (opts.json) {
       io.out(JSON.stringify(d, null, 2));
     } else {
-      io.out(`wa-bridge health check (data folder: ${d.dataDir})`);
+      io.out(`ChatAI health check (data folder: ${d.dataDir})`);
       for (const c of d.checks) {
         io.out(`  [${c.ok ? 'ok' : 'WARN'}] ${c.name}: ${c.detail}`);
         if (!c.ok && c.fix) io.out(`         fix: ${c.fix}`);

@@ -5,7 +5,7 @@ import type {
 } from '../core/contracts.js';
 import type {
   Account, Chat, ChatType, Contact, Item, ItemInput, ItemStatus, MentionReason, MessageExtra, MessageInput,
-  Participant, StoredMessage,
+  MediaInfo, MediaRef, MediaStatus, OcrFields, Participant, StoredMessage,
 } from '../core/types.js';
 import { migrate } from './schema.js';
 
@@ -89,6 +89,20 @@ function toItem(r: Row): Item {
 }
 
 const MSG_COLS = 'm.id, m.chat_id, m.sender_id, m.sender_name, m.ts, m.text, m.quoted_id, m.quoted_sender_id, m.mentions, m.mention_reason, m.is_from_me, m.has_media, m.media_type, m.edited, m.deleted, m.quoted_text, m.quoted_sender_name, m.extra';
+
+const MEDIA_COLS = 'md.chat_id, md.message_id, md.ts, md.kind, md.mimetype, md.status, md.size, (md.bytes IS NOT NULL) AS has_bytes, md.ocr_text, md.ocr_fields, md.ocr_confidence';
+
+function toMediaInfo(r: Row): MediaInfo {
+  let fields: OcrFields | null = null;
+  if (typeof r.ocr_fields === 'string') {
+    try { fields = JSON.parse(r.ocr_fields) as OcrFields; } catch { fields = null; }
+  }
+  return {
+    chatId: String(r.chat_id), messageId: String(r.message_id), ts: Number(r.ts), kind: String(r.kind),
+    mimetype: s(r.mimetype), status: String(r.status) as MediaStatus, size: n(r.size), hasBytes: b(r.has_bytes),
+    ocrText: s(r.ocr_text), ocrFields: fields, ocrConfidence: n(r.ocr_confidence),
+  };
+}
 
 function placeholders(count: number): string {
   return new Array(count).fill('?').join(',');
@@ -303,6 +317,14 @@ export class SqliteStore implements Store {
         msg.quotedText ?? null, msg.quotedSenderName ?? null, msg.extra ? JSON.stringify(msg.extra) : null,
       );
       if (changes === 0) return false;
+      const md = msg.media;
+      if (md) {
+        this.run(
+          `INSERT OR IGNORE INTO media(chat_id, message_id, ts, kind, mimetype, file_length, media_key, direct_path, url)
+           VALUES (?,?,?,?,?,?,?,?,?)`,
+          msg.chatId, msg.id, msg.ts, md.kind, md.mimetype, md.fileLength, md.mediaKey, md.directPath, md.url,
+        );
+      }
       this.run(`UPDATE chats SET last_message_at = max(coalesce(last_message_at, 0), ?),
         last_activity_at = max(coalesce(last_activity_at, 0), ?) WHERE id = ?`, msg.ts, msg.ts, msg.chatId);
       this.run('UPDATE accounts SET last_message_at = max(coalesce(last_message_at, 0), ?)', msg.ts);
@@ -398,13 +420,100 @@ export class SqliteStore implements Store {
     const sql = `SELECT ${MSG_COLS}, c.name AS chat_name, snippet(messages_fts, 0, '[', ']', '…', 12) AS snip
       FROM messages_fts JOIN messages m ON m.rowid = messages_fts.rowid JOIN chats c ON c.id = m.chat_id
       WHERE ${where.join(' AND ')} ORDER BY bm25(messages_fts), m.ts DESC LIMIT ?`;
+    // Same filters against the OCR text of images.
+    const mediaSql = `SELECT ${MSG_COLS}, c.name AS chat_name, snippet(media_fts, 0, '[', ']', '…', 12) AS snip
+      FROM media_fts JOIN media md ON md.rowid = media_fts.rowid
+      JOIN messages m ON m.chat_id = md.chat_id AND m.id = md.message_id JOIN chats c ON c.id = m.chat_id
+      WHERE ${where.join(' AND ').replace('messages_fts MATCH', 'media_fts MATCH')} ORDER BY bm25(media_fts), m.ts DESC LIMIT ?`;
     try {
-      return this.all(sql, ...p, q.limit).map((r) => ({
+      const hits: SearchHit[] = this.all(sql, ...p, q.limit).map((r) => ({
         message: toMessage(r), chatName: s(r.chat_name), snippet: String(r.snip ?? ''),
       }));
+      const seen = new Set(hits.map((h) => `${h.message.chatId}/${h.message.id}`));
+      for (const r of this.all(mediaSql, ...p, q.limit)) {
+        if (hits.length >= q.limit) break;
+        const m = toMessage(r);
+        if (seen.has(`${m.chatId}/${m.id}`)) continue;
+        hits.push({ message: m, chatName: s(r.chat_name), snippet: `[image text] ${String(r.snip ?? '')}` });
+      }
+      return hits;
     } catch {
       return []; // FTS5 syntax problem on exotic input: never throw
     }
+  }
+
+  // ---------- media ----------
+
+  getMediaInfo(chatId: string, messageId: string): MediaInfo | null {
+    const r = this.one(`SELECT ${MEDIA_COLS} FROM media md WHERE md.chat_id = ? AND md.message_id = ?`, chatId, messageId);
+    return r ? toMediaInfo(r) : null;
+  }
+
+  getMediaBytes(chatId: string, messageId: string): { bytes: Buffer; mimetype: string | null } | null {
+    const r = this.one('SELECT bytes, mimetype FROM media WHERE chat_id = ? AND message_id = ? AND bytes IS NOT NULL', chatId, messageId);
+    return r ? { bytes: r.bytes as Buffer, mimetype: s(r.mimetype) } : null;
+  }
+
+  listMedia(q: { chatIds?: string[]; since?: number; until?: number; limit: number }): (MediaInfo & { chatName: string | null })[] {
+    const where: string[] = ['c.included = 1'];
+    const p: Param[] = [];
+    if (q.chatIds && q.chatIds.length > 0) {
+      where.push(`md.chat_id IN (${placeholders(q.chatIds.length)})`);
+      p.push(...q.chatIds);
+    }
+    if (q.since !== undefined) { where.push('md.ts >= ?'); p.push(q.since); }
+    if (q.until !== undefined) { where.push('md.ts <= ?'); p.push(q.until); }
+    return this.all(
+      `SELECT ${MEDIA_COLS}, c.name AS chat_name FROM media md JOIN chats c ON c.id = md.chat_id
+       WHERE ${where.join(' AND ')} ORDER BY md.ts DESC LIMIT ?`,
+      ...p, q.limit,
+    ).map((r) => ({ ...toMediaInfo(r), chatName: s(r.chat_name) }));
+  }
+
+  nextPendingMedia(now: number, limit: number): (MediaRef & { chatId: string; messageId: string; attempts: number })[] {
+    return this.all(
+      `SELECT chat_id, message_id, kind, mimetype, file_length, media_key, direct_path, url, attempts FROM media
+       WHERE status = 'pending' AND next_try_at <= ? ORDER BY ts DESC LIMIT ?`,
+      now, limit,
+    ).map((r) => ({
+      chatId: String(r.chat_id), messageId: String(r.message_id), kind: 'image',
+      mimetype: s(r.mimetype), fileLength: n(r.file_length), mediaKey: String(r.media_key ?? ''),
+      directPath: s(r.direct_path), url: s(r.url), attempts: Number(r.attempts),
+    }));
+  }
+
+  saveMediaResult(chatId: string, messageId: string, r: {
+    status: MediaStatus; bytes?: Buffer | null; ocrText?: string | null; ocrFields?: OcrFields | null; ocrConfidence?: number | null;
+  }): void {
+    // The download keys are dropped once the media reached a final state.
+    this.run(
+      `UPDATE media SET status = ?, bytes = ?, size = ?, ocr_text = ?, ocr_fields = ?, ocr_confidence = ?,
+         media_key = NULL, direct_path = NULL, url = NULL WHERE chat_id = ? AND message_id = ?`,
+      r.status, r.bytes ?? null, r.bytes ? r.bytes.length : null, r.ocrText ?? null,
+      r.ocrFields ? JSON.stringify(r.ocrFields) : null, r.ocrConfidence ?? null, chatId, messageId,
+    );
+  }
+
+  markMediaRetry(chatId: string, messageId: string, nextTryAt: number, giveUp: boolean): void {
+    this.run(
+      `UPDATE media SET attempts = attempts + 1, next_try_at = ?, status = CASE WHEN ? THEN 'failed' ELSE status END
+       WHERE chat_id = ? AND message_id = ?`,
+      nextTryAt, giveUp ? 1 : 0, chatId, messageId,
+    );
+  }
+
+  capMediaBytes(maxBytes: number): number {
+    const total = Number(this.one('SELECT coalesce(sum(size), 0) AS t FROM media WHERE bytes IS NOT NULL')?.t ?? 0);
+    if (total <= maxBytes) return 0;
+    let over = total - maxBytes;
+    let trimmed = 0;
+    for (const r of this.all('SELECT rowid, size FROM media WHERE bytes IS NOT NULL ORDER BY ts ASC')) {
+      if (over <= 0) break;
+      this.run('UPDATE media SET bytes = NULL WHERE rowid = ?', Number(r.rowid));
+      over -= Number(r.size ?? 0);
+      trimmed++;
+    }
+    return trimmed;
   }
 
   getMentions(q: { since: number | 'last_review'; limit: number }): (StoredMessage & { mentionReason: MentionReason })[] {
@@ -440,6 +549,7 @@ export class SqliteStore implements Store {
   }
 
   purgeOlderThan(cutoff: number): number {
+    this.run('DELETE FROM media WHERE ts < ?', cutoff);
     return this.run('DELETE FROM messages WHERE ts < ?', cutoff);
   }
 

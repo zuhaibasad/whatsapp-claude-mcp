@@ -11,7 +11,7 @@ let ing: Ingestor;
 beforeEach(() => {
   config = {
     retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false, includeChannels: false,
-    allowlist: [], denylist: [], myNames: [], maxTextChars: 2000, logLevel: 'error',
+    allowlist: [], denylist: [], myNames: [], maxTextChars: 2000, logLevel: 'error', mediaDownload: true, mediaOcr: true, mediaMaxMb: 500,
   };
   store = new SqliteStore(new Database(':memory:'));
   store.migrate();

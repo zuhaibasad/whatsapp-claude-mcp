@@ -126,7 +126,7 @@ export async function searchCommand(query: string, opts: SearchOpts, io: Io, dep
     if (opts.chat) {
       const needle = opts.chat.trim().toLowerCase();
       const found = store.listChats({}).filter((c) => c.id === opts.chat || (c.name ?? '').trim().toLowerCase() === needle);
-      if (found.length === 0) throw new CliError(`No chat matches "${opts.chat}". See: wa-bridge chats --all`);
+      if (found.length === 0) throw new CliError(`No chat matches "${opts.chat}". See: chatai chats --all`);
       chatIds = found.map((c) => c.id);
     }
     const hits = store.searchMessages(query, { chatIds, since, limit });

@@ -10,6 +10,7 @@ import { SqliteStore } from '../store/index.js';
 import { Backoff, shouldReconnect } from './backoff.js';
 import { HEALTH_TICK_MS, HealthMonitor, type HealthClock } from './health.js';
 import { Ingestor } from './ingest.js';
+import { MediaWorker, type MediaWorkerOptions } from './media.js';
 import { acquireLock } from './lock.js';
 import { createWaClient, useDbAuthState, type DbAuthState } from './wa/index.js';
 
@@ -42,7 +43,7 @@ export interface OpenedDbs {
   close(): void;
 }
 
-export const NOT_INITIALIZED_MESSAGE = 'no encryption key found: run wa-bridge init';
+export const NOT_INITIALIZED_MESSAGE = 'no encryption key found: run chatai init';
 
 /** Opens store.db and auth.db with keys derived from the master key. Shared by the daemon and linking. */
 export async function openDaemonDbs(paths: DataPaths, master: Buffer): Promise<OpenedDbs> {
@@ -100,6 +101,8 @@ export interface CollectorOptions {
   healthClock?: HealthClock;
   healthTickMs?: number;
   keepAliveIntervalMs?: number;
+  /** Image download + OCR overrides (tests). */
+  media?: Pick<MediaWorkerOptions, 'download' | 'ocr' | 'pollMs'>;
 }
 
 export interface CollectorHandle {
@@ -185,6 +188,7 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
     logger,
   );
   ingestor.recomputeIncluded();
+  const media = new MediaWorker({ store, getConfig: () => config, logger, ...opts.media });
 
   const health = new HealthMonitor({
     writeMeta: (k, v) => store.setMeta(k, v),
@@ -317,7 +321,7 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
         // Session expired: the daemon never shows a QR. Linking is the CLI's job.
         attemptActive = false;
         guarded('status', () => store.setLinkStatus('logged_out'));
-        logger.error('session no longer valid (QR requested): run wa-bridge link');
+        logger.error('session no longer valid (QR requested): run chatai link');
         fatal('qr_requested', 'logged_out');
         return;
       case 'open':
@@ -364,7 +368,7 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
         if (s.reason === 'logged_out') {
           guarded('status', () => store.setLinkStatus('logged_out'));
           guarded('auth', () => auth.clear());
-          logger.error('logged out by WhatsApp: run wa-bridge link');
+          logger.error('logged out by WhatsApp: run chatai link');
         } else {
           logger.error({ reason: s.reason }, 'connection closed permanently, stopping');
         }
@@ -372,7 +376,7 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
       }
     }
   });
-  client.on('messages', (m) => { touchSync(); guarded('messages', () => ingestor.onMessages(m)); });
+  client.on('messages', (m) => { touchSync(); guarded('messages', () => ingestor.onMessages(m)); void media.kick(); });
   client.on('edit', (e) => { touchSync(); guarded('edit', () => ingestor.onEdit(e)); });
   client.on('delete', (e) => { touchSync(); guarded('delete', () => ingestor.onDelete(e)); });
   client.on('chats', (c) => { touchSync(); guarded('chats', () => ingestor.onChats(c)); });
@@ -385,6 +389,7 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
   runRetention();
   const retentionTimer = setInterval(runRetention, HOUR_MS);
   const configTimer = setInterval(checkConfig, CONFIG_POLL_MS);
+  media.start();
 
   let stopPromise: Promise<void> | null = null;
   function stop(reason = 'stop', end: CollectorState = 'stopped'): Promise<void> {
@@ -397,6 +402,7 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
       clearInterval(healthTimer);
       health.flush(true);
       clearLiveTimers();
+      await media.stop().catch(() => undefined);
       try {
         await client.close();
       } catch (err) {
@@ -434,9 +440,9 @@ export async function runDaemon(opts: { projectRoot: string; deps?: Partial<Runn
     const master = keyStore.get();
     if (!master) throw new Error(NOT_INITIALIZED_MESSAGE);
     const config = loadConfig(paths).config;
-    logger = opts.deps?.logger ?? createLogger({ level: config.logLevel, file: paths.logFile, name: 'wa-bridge-daemon' });
+    logger = opts.deps?.logger ?? createLogger({ level: config.logLevel, file: paths.logFile, name: 'chatai-daemon' });
     dbs = await openDaemonDbs(paths, master);
-    if (!dbs.auth.hasCreds()) throw new Error('not linked: run wa-bridge link');
+    if (!dbs.auth.hasCreds()) throw new Error('not linked: run chatai link');
     collector = startCollector({ paths, dbs, logger, waClientFactory });
   } catch (err) {
     dbs?.close();

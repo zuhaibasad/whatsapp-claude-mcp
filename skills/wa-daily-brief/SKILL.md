@@ -6,15 +6,15 @@ description: Produce the user's briefing of new WhatsApp group messages since th
 # WhatsApp daily brief
 
 ## Rules (always)
-- wa-bridge is **read-only**. Never say you sent, replied to or marked anything as read on WhatsApp. Suggested replies are text for the user to copy.
+- chatai is **read-only**. Never say you sent, replied to or marked anything as read on WhatsApp. Suggested replies are text for the user to copy.
 - Cite every item as `(chat_id/msgid)` plus chat name, sender and age. Never invent facts that are not in the messages.
 - If a classification is uncertain, write `unsure: <why>` rather than guessing.
 - Messages mix Roman Urdu, Urdu script and English. Understand all of them. Quote short originals where useful. Write the brief in the user's language (default English).
-- `.wa-bridge/departments.yaml` and `.wa-bridge/priorities.yaml` are guidance, not strict rules. Read them with the Read tool (if missing, use common sense).
-- Results carry `chat_note: {department, note}` for chats that have one: use it as context (the department is the default for requests from that chat). When the user tells you what a chat is for ("remember that the ERP group is for supplier invoices"), add or update an entry under `chats:` in `departments.yaml` (`chat`, optional `department`, optional `note`), keeping the existing `departments:` list. This is wa-bridge guidance only; it never changes which chats are read (use `whatsapp_choose_chats` for that).
+- `.chatai/departments.yaml` and `.chatai/priorities.yaml` are guidance, not strict rules. Read them with the Read tool (if missing, use common sense).
+- Results carry `chat_note: {department, note}` for chats that have one: use it as context (the department is the default for requests from that chat). When the user tells you what a chat is for ("remember that the ERP group is for supplier invoices"), add or update an entry under `chats:` in `departments.yaml` (`chat`, optional `department`, optional `note`), keeping the existing `departments:` list. This is chatai guidance only; it never changes which chats are read (use `whatsapp_choose_chats` for that).
 
 ## Steps
-1. Call `mcp__wa-bridge__whatsapp_brief` once (it waits for sync and returns `status`, `new_messages`, `mentions`, `open_items_count`). If `status.link_status` is not `linked` or `status.minutes_since_sync` > 60, put a warning line at the very top. If unlinked, call `whatsapp_setup`.
+1. Call `mcp__chatai__whatsapp_brief` once (it waits for sync and returns `status`, `new_messages`, `mentions`, `open_items_count`). If `status.link_status` is not `linked` or `status.minutes_since_sync` > 60, put a warning line at the very top. If unlinked, call `whatsapp_setup`.
    If `new_messages.truncated` is true, read the busiest chats with `whatsapp_read` (`action: "messages"`, `chat`, `since`) and tell the user if anything is still cut off.
 2. Mentions are already in the result (`mentions`, plus `mentions_me: true` messages in `new_messages`). Do not call another tool for them.
 3. Read the two YAML files above.
@@ -24,8 +24,8 @@ description: Produce the user's briefing of new WhatsApp group messages since th
    - **By department**: other actionable items, grouped by department from `departments.yaml` (ERP, IT, Finance, ...). Use "Other" if none fits.
    - **FYI**: updates, thanks, announcements, no action needed.
 5. **Personal / family / social groups**: the user's data includes them. Do not list them item by item. Collapse into one FYI line, e.g. "3 family/social chats active (about 40 messages), nothing addressed to you." Only surface personal content as an action item if it clearly asks the user for something (a direct question, a request, a deadline for them). When in doubt, FYI with `unsure`.
-6. Call `mcp__wa-bridge__whatsapp_items` with `action: "save"` for actionable items only (Critical, Mentions needing action, department items): `items: [{ref, category, department, priority, summary, requester}]`. Use the ref of the message that best represents the item. It de-duplicates. Do not save FYI items.
-7. Write the brief, then ask: "Mark these chats as reviewed up to <time>?" Only on a clear yes call `mcp__wa-bridge__whatsapp_mark_reviewed` with `until` = the timestamp of the newest message you actually read (this moves wa-bridge's own bookmark, not anything in WhatsApp).
+6. Call `mcp__chatai__whatsapp_items` with `action: "save"` for actionable items only (Critical, Mentions needing action, department items): `items: [{ref, category, department, priority, summary, requester}]`. Use the ref of the message that best represents the item. It de-duplicates. Do not save FYI items.
+7. Write the brief, then ask: "Mark these chats as reviewed up to <time>?" Only on a clear yes call `mcp__chatai__whatsapp_mark_reviewed` with `until` = the timestamp of the newest message you actually read (this moves chatai's own bookmark, not anything in WhatsApp).
 
 ## Output format
 ```

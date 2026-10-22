@@ -18,9 +18,9 @@ import { CliError, realIo, type Io } from './io.js';
 export function buildProgram(io: Io, deps: CliDeps, setExit: (code: number) => void): Command {
   const program = new Command();
   program
-    .name('wa-bridge')
-    .description('Read-only local WhatsApp bridge for Claude')
-    .option('--project <dir>', 'project folder that holds .wa-bridge/', process.cwd());
+    .name('chatai')
+    .description('ChatAI for WhatsApp: read-only local WhatsApp access for Claude')
+    .option('--project <dir>', 'project folder that holds .chatai/', process.cwd());
   const project = (): string => program.opts<{ project: string }>().project;
 
   const run = (fn: () => Promise<number> | number) => async (): Promise<void> => {
@@ -38,8 +38,8 @@ export function buildProgram(io: Io, deps: CliDeps, setExit: (code: number) => v
   };
 
   program.command('init')
-    .description('create .wa-bridge/, the encryption key and default config (asks you to accept the risks)')
-    .option('--accept', 'non-interactive; also requires env WA_BRIDGE_ACCEPT_RISK="I accept"')
+    .description('create .chatai/, the encryption key and default config (asks you to accept the risks)')
+    .option('--accept', 'non-interactive; also requires env CHATAI_ACCEPT_RISK="I accept"')
     .action((o: { accept?: boolean }) => run(() => initCommand({ project: project(), accept: o.accept }, io, deps))());
 
   program.command('link')

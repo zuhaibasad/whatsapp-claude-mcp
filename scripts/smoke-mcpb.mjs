@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const file = path.resolve(process.argv[2] ?? path.join(root, 'build', `wa-bridge-${pkg.version}.mcpb`));
+const file = path.resolve(process.argv[2] ?? path.join(root, 'build', `chatai-${pkg.version}.mcpb`));
 if (!fs.existsSync(file)) {
   console.error(`missing ${file}: run npm run build:mcpb first`);
   process.exit(1);
@@ -76,7 +76,7 @@ try {
     capabilities: { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } },
     clientInfo: { name: 'smoke', version: '0' },
   });
-  check(init.result?.serverInfo?.name === 'wa-bridge', 'initialize returns serverInfo wa-bridge');
+  check(init.result?.serverInfo?.name === 'chatai', 'initialize returns serverInfo chatai');
   check(typeof init.result?.instructions === 'string' && init.result.instructions.length > 100, 'server instructions present');
   child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
 
@@ -90,7 +90,7 @@ try {
   const status = await request('tools/call', { name: 'whatsapp_status', arguments: {} });
   check(status.result?.isError !== true, 'whatsapp_status works with no data');
 
-  const res = await request('resources/read', { uri: 'ui://wa-bridge/setup.html' });
+  const res = await request('resources/read', { uri: 'ui://chatai/setup.html' });
   if (res.error || !res.result?.contents?.[0]?.text) {
     if (!hostPresent) {
       notes.push('TOLERATED: dist/host is not in this package (collector host not merged yet), so the nonce cannot be minted and resources/read is not checked.');

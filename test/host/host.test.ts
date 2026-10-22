@@ -76,7 +76,7 @@ async function until(cond: () => boolean | Promise<boolean>, ms = 3000): Promise
   }
 }
 
-const token = (): string => store.get(`wa-bridge/${keychainAccountId(paths.projectRoot)}${SERVICE_TOKEN_SUFFIX}`) ?? '';
+const token = (): string => store.get(`chatai/${keychainAccountId(paths.projectRoot)}${SERVICE_TOKEN_SUFFIX}`) ?? '';
 
 function req(
   port: number,

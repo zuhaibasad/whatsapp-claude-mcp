@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="docs/assets/hero.svg" alt="wa-bridge: your WhatsApp, briefed by Claude" width="100%">
+<img src="docs/assets/hero.svg" alt="ChatAI for WhatsApp: your WhatsApp, briefed by Claude" width="100%">
 
-# wa-bridge: WhatsApp summary and mentions for Claude Desktop (MCP server)
+# ChatAI for WhatsApp: summaries, mentions and bills in Claude Desktop (MCP server)
 
 **A read-only, local MCP server that lets Claude brief you on the WhatsApp chats you choose.**<br>
 Daily WhatsApp brief, mentions, follow-ups. Roman Urdu and English. Encrypted on your PC.
@@ -21,12 +21,13 @@ Daily WhatsApp brief, mentions, follow-ups. Roman Urdu and English. Encrypted on
 ## What it does
 
 - 📋 **Daily brief.** Ask "Give me my WhatsApp brief". Get Critical, Mentions, By department and FYI.
+- 🧾 **Bills and payment screenshots.** Images are read on your PC (local OCR). Claude gets the amount, date, reference and bank as text, not the picture, so it costs few tokens.
 - 🔎 **Search and follow-ups.** Find old messages. Save action items. Export them to CSV or JSON.
 - 🛡️ **Read-only and private.** Never sends. Never marks read. Data stays on your PC, encrypted.
 
 <div align="center">
 <img src="docs/assets/brief.svg" alt="Example WhatsApp brief shown in a Claude chat. Fake data." width="760">
-<br><sub>Example with fake data. Claude writes the summary. wa-bridge only supplies the messages.</sub>
+<br><sub>Example with fake data. Claude writes the summary. ChatAI only supplies the messages.</sub>
 </div>
 
 ## How setup looks
@@ -58,8 +59,8 @@ Setup runs inside the Claude chat (or in your browser for Claude Code). Four ste
 
 ## Install in 2 minutes (Claude Desktop, Windows)
 
-1. Get `wa-bridge-<version>.mcpb` from the [Releases](../../releases) page. No release yet? Build it: `npm ci` then `npm run build:mcpb` (the file appears in `build/`).
-2. Claude Desktop: **Settings, Extensions, Advanced settings, Install Extension**. Pick the file. Enable **WhatsApp Bridge (read-only)**.
+1. Get `chatai-<version>.mcpb` from the [Releases](../../releases) page. No release yet? Build it: `npm ci` then `npm run build:mcpb` (the file appears in `build/`).
+2. Claude Desktop: **Settings, Extensions, Advanced settings, Install Extension**. Pick the file. Enable **ChatAI for WhatsApp**.
 3. In a chat, say **"Set up WhatsApp"** and follow the four steps above.
 
 Tools missing? Quit Claude Desktop fully and open it again. You need Windows, your own phone with WhatsApp, and a Claude account.
@@ -72,7 +73,7 @@ git clone https://github.com/zuhaibasad/whatsapp-claude-mcp.git
 cd whatsapp-claude-mcp
 npm ci
 npm run build
-claude mcp add --transport stdio --scope user wa-bridge -- "$((Get-Command node).Source)" "$((Resolve-Path dist/mcp/main.js).Path)"
+claude mcp add --transport stdio --scope user chatai -- "$((Get-Command node).Source)" "$((Resolve-Path dist/mcp/main.js).Path)"
 ```
 
 Needs Node.js 22.12 or newer. In Claude Code run `/mcp` to check, then say "Set up WhatsApp". Setup opens in your browser. Optional skills for briefs, mentions, reports and export are in [`skills/`](skills/README.md).
@@ -86,6 +87,7 @@ Needs Node.js 22.12 or newer. In Claude Code run `/mcp` to check, then say "Set 
 | "Who mentioned me since my last review?" | Mentions and replies, with suggested text to copy |
 | "Search ERP Support for invoice issues, last 7 days" | Matching messages with sender and time |
 | "Save this as a high-priority Finance follow-up" | A local action item |
+| "Total the payments posted in Accounts this week" | Amounts, dates and references read from the screenshots |
 | "Show my open items by department" | Your follow-up list, oldest first |
 | "Stop reading the Family group" | Chat selection updated |
 
@@ -96,7 +98,7 @@ flowchart LR
     WA([WhatsApp]) <-->|linked device, read-only| C
     subgraph PC[Your Windows PC]
         direction LR
-        subgraph M[wa-bridge MCP server]
+        subgraph M[ChatAI MCP server]
             C[Collector] --> T[7 MCP tools]
         end
         C --> S[(Encrypted local store)]
@@ -111,7 +113,7 @@ The collector lives inside the MCP server, so it runs only while Claude is open.
 
 ## Private by design
 
-- 🏠 **Local only.** Messages are stored in `%USERPROFILE%\.wa-bridge`. The setup page listens on `127.0.0.1` only.
+- 🏠 **Local only.** Messages are stored in `%USERPROFILE%\.chatai`. The setup page listens on `127.0.0.1` only.
 - 🔐 **Encrypted.** The message database and the WhatsApp session are encrypted. The key is in Windows Credential Manager, never in a file.
 - 👀 **Read-only.** No sending, no blue ticks, no "online" status. Code checks in the test suite block write APIs.
 - ✅ **You choose the chats.** Excluded chats are not stored. Direct chats and channels start off. Messages expire after 30 days by default.
@@ -131,11 +133,11 @@ The collector lives inside the MCP server, so it runs only while Claude is open.
 </details>
 
 <details><summary>Where is my data stored?</summary>
-<br>On your PC in <code>%USERPROFILE%\.wa-bridge</code>: <code>store.db</code> and <code>auth.db</code> (encrypted), plus plain config files and exports. Exports and YAML files are not encrypted, so protect them.
+<br>On your PC in <code>%USERPROFILE%\.chatai</code>: <code>store.db</code> and <code>auth.db</code> (encrypted), plus plain config files and exports. Exports and YAML files are not encrypted, so protect them.
 </details>
 
 <details><summary>What if Claude is closed?</summary>
-<br>Nothing is collected while Claude is closed. When you open it again, wa-bridge catches up on what WhatsApp still provides. Long gaps can leave holes.
+<br>Nothing is collected while Claude is closed. When you open it again, ChatAI catches up on what WhatsApp still provides. Long gaps can leave holes.
 </details>
 
 <details><summary>Why not claude.ai in the browser?</summary>
@@ -147,7 +149,7 @@ The collector lives inside the MCP server, so it runs only while Claude is open.
 </details>
 
 <details><summary>How do I disconnect?</summary>
-<br>On your phone: WhatsApp, Linked devices, remove the wa-bridge device. Delete <code>%USERPROFILE%\.wa-bridge</code> to remove local data. This does not recall text already sent to Claude.
+<br>On your phone: WhatsApp, Linked devices, remove the device ChatAI linked (it shows as a Windows desktop). Delete <code>%USERPROFILE%\.chatai</code> to remove local data. This does not recall text already sent to Claude.
 </details>
 
 ## Roadmap
@@ -164,7 +166,7 @@ npm run build
 npm run build:mcpb # Claude Desktop bundle
 ```
 
-Read [docs/PLAN.md](docs/PLAN.md), [docs/DECISIONS.md](docs/DECISIONS.md) and [docs/notes/](docs/notes/). Keep the read-only rule. Use fake fixtures. Never commit a real `.wa-bridge` folder, QR, session or export.
+Read [docs/PLAN.md](docs/PLAN.md), [docs/DECISIONS.md](docs/DECISIONS.md) and [docs/notes/](docs/notes/). Keep the read-only rule. Use fake fixtures. Never commit a real `.chatai` folder, QR, session or export.
 
 Seven MCP tools: `whatsapp_brief`, `whatsapp_status`, `whatsapp_read`, `whatsapp_items`, `whatsapp_mark_reviewed`, `whatsapp_setup`, `whatsapp_choose_chats`.
 </details>
@@ -175,6 +177,6 @@ Seven MCP tools: `whatsapp_brief`, `whatsapp_status`, `whatsapp_read`, `whatsapp
 
 ## Disclaimer
 
-wa-bridge is an independent project. It is not affiliated with, authorized by, or endorsed by WhatsApp LLC, Meta Platforms, or Anthropic. WhatsApp, Meta and Claude are trademarks of their owners, used here only to describe compatibility. Use at your own risk and follow the laws and terms that apply to you.
+ChatAI for WhatsApp is an independent project. It is not affiliated with, authorized by, or endorsed by WhatsApp LLC, Meta Platforms, or Anthropic. WhatsApp, Meta and Claude are trademarks of their owners, used here only to describe compatibility. Use at your own risk and follow the laws and terms that apply to you.
 
 <div align="center"><sub>Built by <a href="https://github.com/zuhaibasad">Zuhaib Asad</a></sub></div>

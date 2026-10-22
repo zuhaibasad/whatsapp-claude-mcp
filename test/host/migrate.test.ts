@@ -97,6 +97,6 @@ describe('migrateLegacyDataDir', () => {
     expect(migrateLegacyDataDir(paths, { keyring, legacyDir: legacy })).toMatchObject({ migrated: false });
     expect(fs.existsSync(paths.storeDb)).toBe(false);
     expect(migrateLegacyDataDir(paths, { keyring, platform: 'linux', env: { LOCALAPPDATA: root } }).migrated).toBe(false);
-    expect(migrateLegacyDataDir(paths, { keyring, platform: 'win32', env: { LOCALAPPDATA: root, WA_BRIDGE_HOME: newDir } }).migrated).toBe(false);
+    expect(migrateLegacyDataDir(paths, { keyring, platform: 'win32', env: { LOCALAPPDATA: root, CHATAI_HOME: newDir } }).migrated).toBe(false);
   });
 });

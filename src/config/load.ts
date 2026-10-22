@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { z } from 'zod';
-import { DEFAULT_MAX_TEXT_CHARS, DEFAULT_RETENTION_DAYS } from '../core/constants.js';
+import { DEFAULT_MAX_TEXT_CHARS, DEFAULT_MEDIA_MAX_MB, DEFAULT_RETENTION_DAYS } from '../core/constants.js';
 import type { ChatNote, Config, Department, PriorityRules } from '../core/contracts.js';
 import type { DataPaths } from '../core/paths.js';
 
@@ -35,6 +35,9 @@ const ConfigSchema = z.object({
   my_names: textList,
   max_text_chars: z.number().int().min(1).nullish(),
   log_level: z.enum(['error', 'warn', 'info', 'debug']).nullish(),
+  media_download: z.boolean().nullish(),
+  media_ocr: z.boolean().nullish(),
+  media_max_mb: z.number().int().min(0).nullish(),
 });
 
 const nonEmptyText = z.string().refine((s) => s.trim() !== '', 'must not be empty');
@@ -147,6 +150,9 @@ export function loadConfig(paths: DataPaths): { config: Config; warnings: string
     myNames: cleanList(d.my_names),
     maxTextChars: d.max_text_chars ?? DEFAULT_MAX_TEXT_CHARS,
     logLevel: d.log_level ?? 'info',
+    mediaDownload: d.media_download ?? true,
+    mediaOcr: d.media_ocr ?? true,
+    mediaMaxMb: d.media_max_mb ?? DEFAULT_MEDIA_MAX_MB,
   };
   return { config, warnings };
 }

@@ -33,7 +33,7 @@ export interface CliDeps {
   runDaemon(opts: { projectRoot: string }): Promise<DaemonHandle>;
   /** Resolves when the foreground daemon should shut down (SIGINT/SIGTERM). */
   waitForShutdown(): Promise<void>;
-  /** Starts `wa-bridge <args>` as a detached background process; returns its pid. */
+  /** Starts `chatai <args>` as a detached background process; returns its pid. */
   spawnDetached(args: string[]): number | undefined;
   /** Sends SIGTERM to a pid. */
   killPid(pid: number): void;
@@ -77,7 +77,7 @@ export function defaultDeps(): CliDeps {
     },
     killPid: (pid) => void process.kill(pid, 'SIGTERM'),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    createClient: (auth, logFile) => createWaClient({ auth, logger: createLogger({ level: 'warn', name: 'wa-bridge-unlink', file: logFile }) }),
+    createClient: (auth, logFile) => createWaClient({ auth, logger: createLogger({ level: 'warn', name: 'chatai-unlink', file: logFile }) }),
     renderQr: (qr) => QRCode.toString(qr, { type: 'terminal', small: true }),
     writeQrPng: (file, qr) => QRCode.toFile(file, qr),
     unlinkOpenTimeoutMs: 30_000,

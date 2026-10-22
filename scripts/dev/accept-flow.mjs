@@ -37,7 +37,7 @@ check('initial step is needs_accept', s0.result?.structuredContent?.step === 'ne
 const bad = await call('setup_accept_risk', { nonce: 'not-a-real-nonce' });
 check('accept with a fake nonce is refused', bad.result?.isError === true);
 
-const res = await rpc('resources/read', { uri: 'ui://wa-bridge/setup.html' });
+const res = await rpc('resources/read', { uri: 'ui://chatai/setup.html' });
 const html = res.result.contents[0].text;
 const nonce = html.match(/__WA_NONCE__="([^"]+)"/)?.[1];
 check('panel HTML carries a nonce', !!nonce);

@@ -1,4 +1,4 @@
-// Non-interactive chat selection: `wa-bridge chats select|include|exclude`.
+// Non-interactive chat selection: `chatai chats select|include|exclude`.
 import type { Command } from 'commander';
 import { loadConfig } from '../../config/index.js';
 import { computeRules, currentSelection, writeSelection, type ChatChoice } from '../../config/selection.js';
@@ -45,7 +45,7 @@ export function resolveChat(arg: string, all: ChatChoice[]): ChatChoice {
   if (e) return e;
   const sub = pick(all.filter((c) => (c.name ?? '').toLowerCase().includes(needle) || c.id.toLowerCase().includes(needle)));
   if (sub) return sub;
-  throw new CliError(`No chat matches "${arg}". See: wa-bridge chats --all`);
+  throw new CliError(`No chat matches "${arg}". See: chatai chats --all`);
 }
 
 function parseSetting(flag: string, v: string | undefined): TypeSetting | undefined {
@@ -80,7 +80,7 @@ export async function selectCommand(opts: SelectOpts, io: Io, deps: CliDeps): Pr
 
   if (!changing) {
     io.out(`Currently selected: ${summary(before)}.`);
-    io.out('Change it with: wa-bridge chats select --all | --none | --set-groups all|none | --set-direct all|none | --set-channels all|none, or chats include/exclude <name|id>...');
+    io.out('Change it with: chatai chats select --all | --none | --set-groups all|none | --set-direct all|none | --set-channels all|none, or chats include/exclude <name|id>...');
     return 0;
   }
 

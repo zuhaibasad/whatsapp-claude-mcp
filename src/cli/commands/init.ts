@@ -14,7 +14,7 @@ export interface InitOpts {
   env?: NodeJS.ProcessEnv;
 }
 
-/** Adds `.wa-bridge/` to <project>/.gitignore once. Returns true if the file changed. */
+/** Adds `.chatai/` to <project>/.gitignore once. Returns true if the file changed. */
 export function ensureGitignore(projectRoot: string): boolean {
   const file = path.join(projectRoot, '.gitignore');
   const entry = `${DATA_DIR_NAME}/`;
@@ -46,9 +46,9 @@ export async function initCommand(opts: InitOpts, io: Io, deps: CliDeps): Promis
 
   io.out(RISK_WARNING);
   if (opts.accept) {
-    if (env['WA_BRIDGE_ACCEPT_RISK'] !== ACCEPT_PHRASE) {
+    if (env['CHATAI_ACCEPT_RISK'] !== ACCEPT_PHRASE) {
       throw new CliError(
-        `--accept is only allowed when the environment variable WA_BRIDGE_ACCEPT_RISK is set to "${ACCEPT_PHRASE}".`,
+        `--accept is only allowed when the environment variable CHATAI_ACCEPT_RISK is set to "${ACCEPT_PHRASE}".`,
       );
     }
   } else {
@@ -64,8 +64,8 @@ export async function initCommand(opts: InitOpts, io: Io, deps: CliDeps): Promis
   io.out(changed ? `  added ${DATA_DIR_NAME}/ to .gitignore` : `  ${DATA_DIR_NAME}/ already in .gitignore`);
   io.out('');
   io.out('Next steps:');
-  io.out('  1. Edit .wa-bridge/config.yaml (your names, which chats to include).');
-  io.out('  2. wa-bridge link            link your WhatsApp account (scan the QR code)');
-  io.out('  3. wa-bridge daemon start    start collecting messages');
+  io.out('  1. Edit .chatai/config.yaml (your names, which chats to include).');
+  io.out('  2. chatai link            link your WhatsApp account (scan the QR code)');
+  io.out('  3. chatai daemon start    start collecting messages');
   return 0;
 }

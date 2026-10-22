@@ -29,7 +29,7 @@ export function resolveHostDeps(paths: DataPaths, over: Partial<HostDeps> = {}):
     keyring,
     keyStore: over.keyStore ?? ((root) => createMasterKeyStore(root, keyring)),
     waClientFactory: over.waClientFactory ?? ((a) => createWaClient({ auth: a.auth, logger: a.logger, onFrame: a.onFrame })),
-    logger: over.logger ?? createLogger({ level: 'info', file: paths.logFile, name: 'wa-bridge-host' }),
+    logger: over.logger ?? createLogger({ level: 'info', file: paths.logFile, name: 'chatai-host' }),
     openUrl: over.openUrl ?? defaultOpenUrl,
     lockRetryMs: over.lockRetryMs ?? 30_000,
     liveQuietMs: over.liveQuietMs ?? 5_000,
@@ -38,7 +38,7 @@ export function resolveHostDeps(paths: DataPaths, over: Partial<HostDeps> = {}):
     linkTimeoutMs: over.linkTimeoutMs ?? 5 * 60_000,
     settle: over.settle ?? {},
     disconnectTimeoutMs: over.disconnectTimeoutMs ?? 20_000,
-    uiHtmlPath: over.uiHtmlPath ?? process.env['WA_BRIDGE_UI_HTML'] ?? null,
+    uiHtmlPath: over.uiHtmlPath ?? process.env['CHATAI_UI_HTML'] ?? null,
     version: over.version ?? HOST_VERSION,
     now: over.now ?? Date.now,
   };

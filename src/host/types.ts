@@ -74,7 +74,7 @@ export class HostError extends Error {
 
 /** The holder cannot be reached (no service.json, no token, connection refused). */
 export class HostUnavailableError extends Error {
-  constructor(message = 'the wa-bridge collector is not reachable') {
+  constructor(message = 'the chatai collector is not reachable') {
     super(message);
     this.name = 'HostUnavailableError';
   }

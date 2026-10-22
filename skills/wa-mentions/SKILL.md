@@ -6,14 +6,14 @@ description: List WhatsApp messages that mention or reply to the user and draft 
 # WhatsApp mentions and suggested replies
 
 ## Rules (always)
-- wa-bridge is **read-only**. Never claim you sent or replied on WhatsApp or marked anything read. Every suggested reply is text for the user to copy and send themselves; label it "copy and send yourself".
+- chatai is **read-only**. Never claim you sent or replied on WhatsApp or marked anything read. Every suggested reply is text for the user to copy and send themselves; label it "copy and send yourself".
 - Cite each item with its ref `(chat_id/msgid)`, chat name, sender and age. Never invent facts. Say `unsure: ...` when intent is unclear.
 - Messages mix Roman Urdu, Urdu script and English. Quote short originals where useful.
-- `.wa-bridge/departments.yaml` / `priorities.yaml` are optional guidance (Read tool), not strict rules.
+- `.chatai/departments.yaml` / `priorities.yaml` are optional guidance (Read tool), not strict rules.
 
 ## Steps
-1. Call `mcp__wa-bridge__whatsapp_brief` once (with `since` if the user named a period). Warn at the top if `status` says not linked or `minutes_since_sync` > 60. Use `mentions` plus `mentions_me: true` messages in `new_messages`.
-2. If a mention is ambiguous (short, refers to earlier context), call `mcp__wa-bridge__whatsapp_read` (`action: "messages"`, `chat`) to read the messages around it. Use `reply_to` to follow threads.
+1. Call `mcp__chatai__whatsapp_brief` once (with `since` if the user named a period). Warn at the top if `status` says not linked or `minutes_since_sync` > 60. Use `mentions` plus `mentions_me: true` messages in `new_messages`.
+2. If a mention is ambiguous (short, refers to earlier context), call `mcp__chatai__whatsapp_read` (`action: "messages"`, `chat`) to read the messages around it. Use `reply_to` to follow threads.
 3. For each mention give: who, what they want, ref, reason (`at_mention`, `name`, `reply`), and a suggested reply.
 4. Skip mentions that are only thanks; list them in one line at the end. Personal/family chats: draft a reply only if something is clearly asked of the user.
 5. Optionally offer `whatsapp_items` (`action: "save"`) for mentions needing follow-up (ask first).

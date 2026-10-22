@@ -54,7 +54,7 @@ describe('items CLI', () => {
   it('export writes inside the project and refuses outside', async () => {
     const io = fakeIo();
     await exportCommand({ project, format: 'csv' }, io, deps);
-    expect(io.text()).toMatch(/Exported 2 items to \.wa-bridge\/exports\/items-/);
+    expect(io.text()).toMatch(/Exported 2 items to \.chatai\/exports\/items-/);
     await exportCommand({ project, format: 'json', path: 'x/o.json', status: 'open' }, fakeIo(), deps);
     expect(fs.existsSync(path.join(project, 'x', 'o.json'))).toBe(true);
     await expect(exportCommand({ project, path: '../nope.csv' }, fakeIo(), deps)).rejects.toBeInstanceOf(CliError);

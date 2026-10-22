@@ -45,7 +45,7 @@ const keyring: KeyringBackend = {
   deletePassword: (s, a) => keys.delete(`${s}/${a}`),
 };
 const logger = pino({ level: 'silent' });
-const token = (): string => keys.get(`wa-bridge/${keychainAccountId(paths.projectRoot)}${SERVICE_TOKEN_SUFFIX}`) ?? '';
+const token = (): string => keys.get(`chatai/${keychainAccountId(paths.projectRoot)}${SERVICE_TOKEN_SUFFIX}`) ?? '';
 const masterPresent = (): boolean => [...keys.keys()].some((k) => !k.endsWith(SERVICE_TOKEN_SUFFIX));
 const unlinkCalls = (): number => clients.reduce((n, c) => n + c.unlink.mock.calls.length, 0);
 

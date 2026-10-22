@@ -32,7 +32,7 @@ export const REVIEWED_SAFE: Readonly<Record<string, string>> = {
   assertSessions: 'signal session setup for decryption/retry; internal',
   digestKeyBundle: 'signal key-bundle check; internal housekeeping',
   cleanDirtyBits: 'clears server-side dirty flags after sync; internal housekeeping, not a message action',
-  refreshMediaConn: 'refresh media host connection info; media is never downloaded',
+  refreshMediaConn: 'refresh media host connection info; not used (images are fetched with downloadContentFromMessage, no socket)',
   createParticipantNodes: 'builds local encrypted-node structures for message sending; sends nothing itself',
   updateServerTimeOffset: 'local clock-offset bookkeeping; sends nothing',
   executeUSyncQuery: 'user-sync query (read); not used by us',

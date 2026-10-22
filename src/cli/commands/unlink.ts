@@ -41,7 +41,7 @@ export async function unlinkCommand(opts: UnlinkOpts, io: Io, deps: CliDeps): Pr
 
   io.out('This will remove the linked device from your WhatsApp account and delete the local session.');
   io.out(keep ? 'Your stored messages and settings are kept (--keep-data).'
-    : 'All local wa-bridge data (messages, settings, exports) and the keychain key will be deleted too.');
+    : 'All local ChatAI data (messages, settings, exports) and the keychain key will be deleted too.');
   const answer = await io.prompt(`Type "${CONFIRM_WORD}" to continue: `);
   if (answer.trim() !== CONFIRM_WORD) throw new CliError('Aborted: nothing was changed.');
 

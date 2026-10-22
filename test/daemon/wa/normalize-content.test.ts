@@ -47,3 +47,16 @@ describe('location and contact cards', () => {
     expect(parseVcard(null, 'N')).toEqual({ name: 'N', phones: [] });
   });
 });
+
+describe('image download reference', () => {
+  const key = new Uint8Array([1, 2, 3]);
+  it('images carry mediaKey (base64), path, mimetype and size', () => {
+    const r = normalizeMessage(mk({ imageMessage: { mediaKey: key, directPath: '/v/t62/abc', url: 'https://mmg.whatsapp.net/x', mimetype: 'image/jpeg', fileLength: 2048 } }), ME);
+    expect(r?.media).toEqual({ kind: 'image', mediaKey: 'AQID', directPath: '/v/t62/abc', url: 'https://mmg.whatsapp.net/x', mimetype: 'image/jpeg', fileLength: 2048 });
+  });
+  it('an image sent as a document counts; a PDF, or an image without keys, does not', () => {
+    expect(normalizeMessage(mk({ documentMessage: { mediaKey: key, directPath: '/d', mimetype: 'image/png' } }), ME)?.media?.kind).toBe('image');
+    expect(normalizeMessage(mk({ documentMessage: { mediaKey: key, directPath: '/d', mimetype: 'application/pdf' } }), ME)?.media).toBeNull();
+    expect(normalizeMessage(mk({ imageMessage: { caption: 'x' } }), ME)?.media).toBeNull();
+  });
+});

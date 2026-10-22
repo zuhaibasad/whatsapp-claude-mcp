@@ -81,7 +81,7 @@ export function mcpAppHost(): Host {
   return {
     kind: 'app',
     async init() {
-      app = new App({ name: 'wa-bridge-setup', version: '0.1.0' });
+      app = new App({ name: 'chatai-setup', version: '0.1.0' });
       app.ontoolresult = (params) => {
         initial ??= initialScreenFrom(params.structuredContent);
         gotResult();

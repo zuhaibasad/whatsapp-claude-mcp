@@ -33,7 +33,7 @@ describe('MCP over a linked in-memory transport', () => {
     const init = await request('initialize', {
       protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '0' },
     });
-    expect(init.result.serverInfo.name).toBe('wa-bridge');
+    expect(init.result.serverInfo.name).toBe('chatai');
     await clientSide.send({ jsonrpc: '2.0', method: 'notifications/initialized' } as JSONRPCMessage);
 
     const list = await request('tools/list', {});

@@ -22,7 +22,7 @@ function rng(seed: number): () => number {
 
 const baseCfg: Config = {
   retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false, includeChannels: false,
-  allowlist: [], denylist: [], myNames: [], maxTextChars: 2000, logLevel: 'info',
+  allowlist: [], denylist: [], myNames: [], maxTextChars: 2000, logLevel: 'info', mediaDownload: true, mediaOcr: true, mediaMaxMb: 500,
 };
 
 function applied(all: ChatChoice[], r: ReturnType<typeof computeRules>): Set<string> {

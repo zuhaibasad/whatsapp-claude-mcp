@@ -45,7 +45,7 @@ describe('read-only guard: scan of src/', () => {
       return scanSource(rel, readFileSync(f, 'utf8'));
     });
     expect(violations.map(formatViolation), 'READ-ONLY GUARD VIOLATIONS (file:line  name)').toEqual([]);
-  });
+  }, 60_000); // parses all of src/ with the TS compiler; slow when the suite runs in parallel
 });
 
 describe('read-only guard: denylist', () => {

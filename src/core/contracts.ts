@@ -2,7 +2,7 @@
 import type Database from 'better-sqlite3-multiple-ciphers';
 import type {
   Account, Chat, ChatType, Contact, Item, ItemInput, ItemStatus, ItemPriority,
-  MessageInput, MentionReason, Participant, StoredMessage,
+  MediaInfo, MediaRef, MediaStatus, MessageInput, MentionReason, OcrFields, Participant, StoredMessage,
 } from './types.js';
 
 export type Db = Database.Database;
@@ -42,6 +42,9 @@ export interface Config {
   myNames: string[];              // names/nicknames for text mention detection
   maxTextChars: number;           // default 2000
   logLevel: 'error' | 'warn' | 'info' | 'debug';
+  mediaDownload: boolean;         // default true: images in selected chats are downloaded (encrypted, local)
+  mediaOcr: boolean;              // default true: local OCR (tesseract) on downloaded images
+  mediaMaxMb: number;             // default 500: cap on stored image bytes (OCR text is kept)
 }
 
 export interface Department {
@@ -163,6 +166,22 @@ export interface Store {
   /** Deletes messages with ts < cutoff. Returns deleted count. */
   purgeOlderThan(cutoff: number): number;
 
+  // ---------- media (images queued by insertMessage when msg.media is set) ----------
+  getMediaInfo(chatId: string, messageId: string): MediaInfo | null;
+  getMediaBytes(chatId: string, messageId: string): { bytes: Buffer; mimetype: string | null } | null;
+  /** Media of included chats, newest first. */
+  listMedia(q: { chatIds?: string[]; since?: number; until?: number; limit: number }): (MediaInfo & { chatName: string | null })[];
+  /** Pending media whose retry time has come, newest first. */
+  nextPendingMedia(now: number, limit: number): (MediaRef & { chatId: string; messageId: string; attempts: number })[];
+  /** Final result of a download (+ OCR). Bytes may be null (OCR kept, image not stored). */
+  saveMediaResult(chatId: string, messageId: string, r: {
+    status: MediaStatus; bytes?: Buffer | null; ocrText?: string | null; ocrFields?: OcrFields | null; ocrConfidence?: number | null;
+  }): void;
+  /** Counts a failed attempt; schedules a retry at nextTryAt, or sets status 'failed' when giveUp. */
+  markMediaRetry(chatId: string, messageId: string, nextTryAt: number, giveUp: boolean): void;
+  /** Drops stored image bytes, oldest first, until the total is <= maxBytes. OCR text is kept. Returns rows trimmed. */
+  capMediaBytes(maxBytes: number): number;
+
   saveItems(items: ItemInput[]): { saved: number; duplicates: number; ids: number[] };
   listItems(q?: ItemQuery): (Item & { chatName: string | null; sourcePurged: boolean })[];
   updateItem(id: number, status: ItemStatus): Item | null;
@@ -227,7 +246,7 @@ export interface WaClient {
   connect(): Promise<void>;
   /** Closes the socket without logging out. */
   close(): Promise<void>;
-  /** Logs out the linked device on WhatsApp. Only called by `wa-bridge unlink`. */
+  /** Logs out the linked device on WhatsApp. Only called by `chatai unlink`. */
   unlink(): Promise<void>;
 }
 

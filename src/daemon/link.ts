@@ -13,7 +13,7 @@ import { createWaClient } from './wa/index.js';
 
 export class AlreadyLinkedError extends Error {
   constructor() {
-    super('already linked: run wa-bridge unlink first');
+    super('already linked: run chatai unlink first');
     this.name = 'AlreadyLinkedError';
   }
 }
@@ -333,7 +333,7 @@ export async function linkAccount(opts: {
     }
     const master = keyStore.get();
     if (!master) throw new Error(NOT_INITIALIZED_MESSAGE);
-    const logger = opts.deps?.logger ?? createLogger({ level: 'warn', name: 'wa-bridge-link', file: paths.logFile });
+    const logger = opts.deps?.logger ?? createLogger({ level: 'warn', name: 'chatai-link', file: paths.logFile });
     dbs = await openDaemonDbs(paths, master);
     const existing = dbs.store.getAccount();
     if (dbs.auth.hasCreds() && existing && existing.linkStatus !== 'logged_out' && existing.linkStatus !== 'unlinked') {

@@ -1,7 +1,7 @@
 import { hkdfSync } from 'node:crypto';
 import type { DbPurpose } from '../core/contracts.js';
 
-const SALT = 'wa-bridge/v1';
+const SALT = 'wa-bridge/v1'; // historical, kept: changing it changes derived keys
 
 /** Derives a 32-byte per-file key from the master key. Deterministic; differs per purpose. */
 export function deriveDbKey(master: Buffer, purpose: DbPurpose): Buffer {
