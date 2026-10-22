@@ -197,3 +197,15 @@ export interface WaClient {
   /** Logs out the linked device on WhatsApp. Only called by `wa-bridge unlink`. */
   unlink(): Promise<void>;
 }
+
+// ---------- onboarding chat picker (T11) ----------
+
+/** One row in the chat picker. Shared by the daemon (link) and the CLI picker. */
+export interface ChatRow {
+  id: string;
+  name: string | null;
+  type: ChatType;
+  participantCount: number | null;
+  lastMessageAt: number | null;
+  preselected: boolean;
+}
