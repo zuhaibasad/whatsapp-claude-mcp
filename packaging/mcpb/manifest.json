@@ -8,7 +8,7 @@
   "author": { "name": "Zuhaib Asad" },
   "icon": "icon.png",
   "repository": { "type": "git", "url": "https://github.com/zuhaibasad/whatsapp-claude-mcp" },
-  "license": "Apache-2.0",
+  "license": "MIT",
   "compatibility": { "platforms": ["win32"], "runtimes": { "node": ">=20" } },
   "server": {
     "type": "node",

@@ -1,5 +1,7 @@
-WhatsApp Claude MCP (wa-bridge)
-Copyright 2026 Zuhaib Asad
+ChatAI for WhatsApp
+Copyright (c) 2026 Zuhaib Asad
+Licensed under the MIT License (see LICENSE).
 
-Licensed under the Apache License, Version 2.0.
-Third-party dependencies retain their respective copyrights and licenses.
+Third-party dependencies keep their own copyrights and licenses. The Claude Desktop
+bundle (.mcpb) includes them in node_modules with their license files. Notably,
+baileys depends on libsignal, which is licensed under GPL-3.0.

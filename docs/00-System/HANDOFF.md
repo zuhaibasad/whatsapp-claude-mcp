@@ -43,7 +43,7 @@ updated: 2026-10-22
 4. Later: PDF bills, Urdu OCR (`urd` traineddata), proxy support for media downloads.
 
 ## Waiting on the user (decisions)
-- **Licensing blocks any PUBLIC release:** `baileys` → `libsignal` 6.0.0 is **GPL-3.0** and bundled. See `docs/LICENSE_OPTIONS.md`.
+- **Project license is now MIT** (was Apache-2.0). **The GPL part still blocks any PUBLIC release:** `baileys` → `libsignal` 6.0.0 is **GPL-3.0** and bundled. See `docs/LICENSE_OPTIONS.md`.
 - **Whether to push `main`** (not done, not yet asked).
 
 ## Gotchas

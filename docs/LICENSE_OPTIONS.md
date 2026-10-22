@@ -1,5 +1,7 @@
 # License options for wa-bridge
 
+> **Update 2026-10-22:** the project switched to **MIT** (see DECISIONS). The Apache-2.0 recommendation below is kept as history. The GPL-3.0 libsignal question for public bundles is unchanged.
+
 Status: review only. `LICENSE` and `NOTICE` were not changed. This is engineering analysis, not legal advice. Get a lawyer's review before you sell anything or publish a bundle.
 
 ## 1. Facts that drive the choice

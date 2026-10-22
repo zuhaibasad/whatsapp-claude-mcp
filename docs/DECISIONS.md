@@ -61,3 +61,8 @@ Newest first. Each entry: date, decision, reason, alternatives.
 - **Changed everywhere** (no users yet, the user's phone is already unlinked): CLI `chatai`, extension id `chatai`, MCP server name, data folder `~/.chatai`, keychain service `chatai`, env vars `CHATAI_*`, `ui://chatai/...`.
 - **Kept:** the KDF salt `wa-bridge/v1` (invisible; changing it would change derived keys), the WhatsApp device name "Desktop" (needed for full history sync), tool names `whatsapp_*`, skill folders `skills/wa-*`. Old session logs and task specs keep the old name as history.
 - **Trademark:** "X for WhatsApp" is the descriptive form. WhatsApp's green and phone mark are not used.
+
+## 2026-10-22 — License: MIT (was Apache-2.0)
+- **Decision (user):** MIT for the project's own code: shorter and more familiar. The user is the sole copyright holder, so relicensing needs nobody else's consent.
+- **Trade-off:** MIT has no explicit patent grant (Apache-2.0 had one). `NOTICE` now just states MIT plus the third-party note.
+- **Not solved by this:** the `.mcpb` still bundles `libsignal` (GPL-3.0, via baileys). MIT is GPL-compatible for our code, but distributing the bundle publicly still has to meet GPL-3.0 for the combined work. See `docs/LICENSE_OPTIONS.md`. That decision is still open.
