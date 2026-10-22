@@ -19,6 +19,7 @@
     "check": "npm run lint && npm run typecheck && npm run test"
   },
   "dependencies": {
+    "@modelcontextprotocol/server": "2.3.1",
     "@napi-rs/keyring": "2.1.2",
     "baileys": "7.0.0-rc14",
     "better-sqlite3-multiple-ciphers": "13.0.3",
