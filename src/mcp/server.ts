@@ -1,10 +1,15 @@
-import { McpServer } from '@modelcontextprotocol/server';
+import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
+import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { loadConfig } from '../config/index.js';
+import { computeRules, currentSelection, writeSelection, type ChatChoice } from '../config/selection.js';
 import type { Config, Store } from '../core/contracts.js';
 import { resolvePaths, type DataPaths } from '../core/paths.js';
 import type { Chat, ItemCategory, StoredMessage } from '../core/types.js';
 import { isoInZone, itemRow, writeItemsExport, ExportError } from '../export/index.js';
+import type { HostBridge } from './host.js';
+import { PROMPTS, SERVER_INSTRUCTIONS } from './instructions.js';
+import { registerSetupUi } from './setup-tools.js';
 
 /** Thrown by tool handlers; the message is shown to Claude as-is, so keep it short and actionable. */
 export class ToolError extends Error {
@@ -21,6 +26,12 @@ export interface OpenedStore {
 
 export interface McpDeps {
   projectRoot: string;
+  /** Data folder layout. Defaults to resolvePaths(projectRoot) (development mode). */
+  paths?: DataPaths;
+  /** Returns the setup panel HTML (dist/ui/setup.html), or null if missing. Default reads the built file. */
+  readUiHtml?(): string | null;
+  /** The collector host, once it is loaded (null/absent before that or in tests). */
+  getHost?: () => HostBridge | null;
   /** Milliseconds since epoch. */
   now(): number;
   /** Opens store.db. Must throw ToolError("not initialised: ...") when there is no store. */
@@ -152,15 +163,25 @@ class Budget {
 
 // ---------- server ----------
 
-function text(payload: Json): { content: { type: 'text'; text: string }[] } {
+export function text(payload: Json): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
 }
 
-function failure(message: string): { content: { type: 'text'; text: string }[]; isError: true } {
+export function failure(message: string): ToolResult & { isError: true } {
   return { content: [{ type: 'text', text: message }], isError: true };
 }
 
-export type ToolHandler = (args: Record<string, unknown>) => Promise<ReturnType<typeof text> | ReturnType<typeof failure>>;
+export interface ToolResult {
+  content: { type: 'text'; text: string }[];
+  structuredContent?: Record<string, unknown>;
+  isError?: true;
+}
+export type ToolHandler = (args: Record<string, unknown>) => Promise<ToolResult>;
+
+export interface ServerOptions {
+  /** Force the "client supports MCP Apps" decision (tests). Default: read the client's capabilities. */
+  uiSupported?: boolean;
+}
 
 export interface CreatedServer {
   server: McpServer;
@@ -171,9 +192,12 @@ export interface CreatedServer {
 const READ_ONLY_NOTE = 'Reads wa-bridge\'s local copy of WhatsApp; never contacts WhatsApp.';
 const OWN_RECORDS_NOTE = 'Changes only wa-bridge\'s own records, never WhatsApp.';
 
-export function createServer(deps: McpDeps): CreatedServer {
-  const paths = resolvePaths(deps.projectRoot);
-  const server = new McpServer({ name: 'wa-bridge', version: '0.1.0' }, { capabilities: { tools: {} } });
+export function createServer(deps: McpDeps, options: ServerOptions = {}): CreatedServer {
+  const paths = deps.paths ?? resolvePaths(deps.projectRoot);
+  const server = new McpServer(
+    { name: 'wa-bridge', version: '0.1.0' },
+    { capabilities: { tools: { listChanged: true }, resources: {}, prompts: {} }, instructions: SERVER_INSTRUCTIONS },
+  );
   const handlers = new Map<string, ToolHandler>();
 
   function tool<S extends z.ZodObject<z.ZodRawShape>>(
@@ -211,7 +235,7 @@ export function createServer(deps: McpDeps): CreatedServer {
     server.registerTool(
       name,
       { description, inputSchema: schema as z.ZodObject<z.ZodRawShape>, annotations: { readOnlyHint: opts.readOnlyHint, openWorldHint: false } },
-      async (args) => run(args as Record<string, unknown>),
+      async (args) => (await run(args as Record<string, unknown>)) as CallToolResult,
     );
   }
 
@@ -377,7 +401,10 @@ export function createServer(deps: McpDeps): CreatedServer {
         opened = deps.openStore({ write: false });
       } catch (e) {
         const msg = e instanceof ToolError ? e.message : `cannot open the store: ${e instanceof Error ? e.message : 'unknown'}`;
-        return text({ account: null, link_status: 'unlinked', daemon_running: running, warnings: [msg] });
+        return text({
+          account: null, link_status: 'unlinked', daemon_running: running, collector: 'not_linked', last_live_at: null,
+          warnings: [`WhatsApp is not set up yet. Say: "set up WhatsApp" (I will open the setup panel). (${msg})`],
+        });
       }
       try {
         const store = opened.store;
@@ -385,9 +412,12 @@ export function createServer(deps: McpDeps): CreatedServer {
         const counts = store.counts();
         const lastSync = metaSeconds(store.getMeta('last_sync_at'));
         const link = account?.linkStatus ?? 'unlinked';
-        if (link === 'logged_out') warnings.push('WhatsApp logged this device out: run `wa-bridge unlink` then `wa-bridge link`');
-        else if (link === 'unlinked') warnings.push('no account linked: run `wa-bridge link`');
-        if (!running && link !== 'unlinked') warnings.push('daemon not running: run `wa-bridge daemon start`');
+        const collector = store.getMeta('collector_state') ?? (link === 'unlinked' ? 'not_linked' : 'stopped');
+        const lastLive = metaSeconds(store.getMeta('last_live_at'));
+        if (link === 'logged_out' || collector === 'logged_out') warnings.push('WhatsApp logged this device out. Say: "set up WhatsApp" to link it again.');
+        else if (link === 'unlinked') warnings.push('No WhatsApp account is linked. Say: "set up WhatsApp" (I will open the setup panel).');
+        if (!running && link !== 'unlinked') warnings.push('The collector is not running (it runs while Claude is open); data may be old. It starts when Claude starts the wa-bridge connector.');
+        else if (running && link !== 'unlinked' && collector !== 'live') warnings.push(`The collector is ${collector}: recent messages may still be arriving. Call wait_for_sync before a brief.`);
         if (running && lastSync !== null && (c.nowSec - lastSync) / 60 > 60) warnings.push('no sync for more than 60 minutes');
         const iso = (t: number | null | undefined): string | null => (t ? isoInZone(t, c.config.timezone) : null);
         return text({
@@ -396,6 +426,8 @@ export function createServer(deps: McpDeps): CreatedServer {
           daemon_running: running,
           last_connected_at: iso(account?.lastConnectedAt),
           last_message_at: iso(account?.lastMessageAt),
+          collector,
+          last_live_at: iso(lastLive),
           minutes_since_sync: lastSync === null ? null : Math.max(0, Math.round((c.nowSec - lastSync) / 60)),
           counts: { chats_included: counts.chatsIncluded, messages: counts.messages, open_items: counts.openItems },
           warnings,
@@ -412,7 +444,7 @@ export function createServer(deps: McpDeps): CreatedServer {
     description: 'Check whether the bridge is linked, the daemon is running, how fresh the data is, and any warnings. Call first if results look stale or empty. Local check only; never contacts WhatsApp.',
     inputSchema: z.object({}),
     annotations: { readOnlyHint: true, openWorldHint: false },
-  }, async () => statusRun({}));
+  }, async () => (await statusRun({})) as CallToolResult);
 
   tool('mark_reviewed',
     `Mark messages up to "until" as reviewed, so get_new_messages stops returning them. Pass "chats" to limit it, otherwise all included chats. ${OWN_RECORDS_NOTE}`,
@@ -485,5 +517,90 @@ export function createServer(deps: McpDeps): CreatedServer {
       return { ...writeItemsExport({ paths, items, format: a.format, path: a.path, nowMs: deps.now(), timezone: c.config.timezone }) };
     });
 
+  // ---------- setup + conversational control ----------
+
+  const plain = (
+    name: string,
+    description: string,
+    schema: z.ZodObject<z.ZodRawShape>,
+    annotations: { readOnlyHint: boolean },
+    fn: (args: Record<string, unknown>) => Promise<ToolResult>,
+    meta?: Record<string, unknown>,
+  ): void => {
+    const run: ToolHandler = async (raw) => {
+      try {
+        return await fn(schema.parse(raw ?? {}) as Record<string, unknown>);
+      } catch (e) {
+        deps.log?.('tool', { name, ok: false, error: e instanceof Error ? e.name : 'unknown' });
+        if (e instanceof ToolError) return failure(e.message);
+        if (e instanceof z.ZodError) return failure(`invalid arguments: ${e.issues.map((i) => `${i.path.join('.') || 'input'} ${i.message}`).join('; ')}`);
+        return failure(`internal error: ${e instanceof Error ? e.message : 'unknown'}`);
+      }
+    };
+    handlers.set(name, run);
+    const config = { description, inputSchema: schema, annotations: { ...annotations, openWorldHint: false } };
+    if (meta) registerAppTool(server, name, { ...config, _meta: meta }, async (args: unknown) => (await run(args as Record<string, unknown>)) as CallToolResult);
+    else server.registerTool(name, config, async (args) => (await run(args as Record<string, unknown>)) as CallToolResult);
+  };
+
+  const needHost = (): HostBridge => {
+    const h = deps.getHost?.();
+    if (!h) throw new ToolError('the WhatsApp collector is still starting: try again in a few seconds');
+    return h;
+  };
+
+  plain('wait_for_sync',
+    'Wait until the collector has caught up with WhatsApp (messages received while the computer was off). Call before a brief so the data is fresh. Returns the collector state; "live" means up to date. Never contacts WhatsApp itself.',
+    z.object({ timeout_seconds: z.number().int().min(1).max(300).optional().describe('default 60, max 300') }),
+    { readOnlyHint: true },
+    async (a) => {
+      const secs = typeof a.timeout_seconds === 'number' ? a.timeout_seconds : 60;
+      const r = await needHost().ops().waitForSync(secs * 1000);
+      return text({
+        collector: r.collector, ready: r.collector === 'live', waited_seconds: Math.round(r.waitedMs / 1000),
+        note: r.collector === 'live' ? 'up to date' : r.collector === 'not_linked' || r.collector === 'logged_out' ? 'WhatsApp is not linked: say "set up WhatsApp"' : 'not fully caught up yet: results may be incomplete',
+      });
+    });
+
+  tool('set_chat_inclusion',
+    'Choose which chats wa-bridge reads, by name or id: "include" turns chats on, "exclude" turns them off. A chat turned on only collects new messages from then on (history is not downloaded again). Changes only wa-bridge settings, never WhatsApp.',
+    z.object({
+      include: z.array(z.string()).optional().describe('chat names or ids to start reading'),
+      exclude: z.array(z.string()).optional().describe('chat names or ids to stop reading'),
+    }),
+    { write: false, readOnlyHint: false },
+    (a, c, store) => {
+      if (!a.include?.length && !a.exclude?.length) throw new ToolError('pass "include" and/or "exclude" with chat names or ids');
+      const chats = store.listChats({});
+      const all: ChatChoice[] = chats.map((ch) => ({ id: ch.id, name: ch.name, type: ch.type }));
+      const before = currentSelection(c.config, all);
+      const next = new Set(before);
+      const on = (a.include ?? []).map((r) => resolveChat(store, r));
+      const off = (a.exclude ?? []).map((r) => resolveChat(store, r));
+      on.forEach((ch) => next.add(ch.id));
+      off.forEach((ch) => next.delete(ch.id));
+      const rules = computeRules(all, next, c.config);
+      writeSelection(paths, rules, all);
+      const label = (ch: { id: string; name: string | null }): string => ch.name ?? ch.id;
+      const turnedOn = chats.filter((ch) => next.has(ch.id) && !before.has(ch.id));
+      const turnedOff = chats.filter((ch) => !next.has(ch.id) && before.has(ch.id));
+      return {
+        turned_on: turnedOn.map(label), turned_off: turnedOff.map(label),
+        selected_total: next.size,
+        note: turnedOn.length > 0 ? 'Chats turned on only collect new messages from now on; their history is not downloaded again. The collector applies this within about 30 seconds.' : 'The collector applies this within about 30 seconds.',
+      };
+    });
+
+  registerSetupUi({
+    server, deps, handlers, plain, needHost, paths,
+    uiSupported: options.uiSupported,
+  });
+
+  for (const p of PROMPTS) {
+    server.registerPrompt(p.name, { title: p.title, description: p.description },
+      () => ({ messages: [{ role: 'user' as const, content: { type: 'text' as const, text: p.text } }] }));
+  }
+
   return { server, handlers };
 }
+

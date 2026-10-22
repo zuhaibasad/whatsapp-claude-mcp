@@ -1,0 +1,43 @@
+{
+  "manifest_version": "0.3",
+  "name": "wa-bridge",
+  "display_name": "WhatsApp Bridge (read-only)",
+  "version": "0.1.0",
+  "description": "Read-only local WhatsApp context for Claude: briefs, mentions and follow-up items from the chats you choose. Unofficial linked device: against WhatsApp's terms, it can get the number restricted or banned. Data stays encrypted on this computer; message text goes to Anthropic only when Claude reads it. Never sends, never marks read.",
+  "long_description": "wa-bridge links to your WhatsApp as a companion device and keeps an encrypted local copy of the chats you choose. Claude can then summarise new messages, find mentions and track follow-ups. It is strictly read-only: it never sends messages, never marks chats as read and never shows you online. Risks: this is an unofficial client, which WhatsApp's terms do not allow, so your number could be restricted or banned. Other chat members have not agreed to an AI reading their messages. Text that Claude reads is sent to Anthropic.",
+  "author": { "name": "Zuhaib Asad" },
+  "license": "UNLICENSED",
+  "compatibility": { "platforms": ["win32"], "runtimes": { "node": ">=20" } },
+  "server": {
+    "type": "node",
+    "entry_point": "dist/mcp/main.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/mcp/main.js"]
+    }
+  },
+  "tools": [
+    { "name": "open_setup", "description": "Open the WhatsApp setup panel (link account, choose chats)." },
+    { "name": "get_status", "description": "Check whether WhatsApp is linked, the collector state, data freshness and warnings." },
+    { "name": "wait_for_sync", "description": "Wait until the collector has caught up with WhatsApp." },
+    { "name": "set_chat_inclusion", "description": "Choose which chats are read, by name or id." },
+    { "name": "list_chats", "description": "List chats with last activity and unreviewed counts." },
+    { "name": "get_new_messages", "description": "Get messages not yet reviewed, grouped by chat." },
+    { "name": "get_messages", "description": "Get messages of one chat." },
+    { "name": "search_messages", "description": "Full-text search over stored messages." },
+    { "name": "get_mentions", "description": "Messages that mention or reply to you." },
+    { "name": "get_chat_info", "description": "A chat's details and participants." },
+    { "name": "mark_reviewed", "description": "Move wa-bridge's own review bookmark (not WhatsApp)." },
+    { "name": "save_items", "description": "Save follow-up items found in messages." },
+    { "name": "list_items", "description": "List saved follow-up items." },
+    { "name": "update_item", "description": "Set a follow-up item to open, done or dismissed." },
+    { "name": "export_items", "description": "Export follow-up items to CSV or JSON." }
+  ],
+  "tools_generated": false,
+  "prompts": [
+    { "name": "daily_brief", "description": "Brief of new WhatsApp messages since your last review.", "text": "Give me my WhatsApp brief." },
+    { "name": "mentions", "description": "Messages that mention or reply to you, with suggested replies.", "text": "Who mentioned me on WhatsApp and what needs my reply?" },
+    { "name": "department_report", "description": "Open follow-up items grouped by department.", "text": "Show my open WhatsApp follow-up items by department." }
+  ],
+  "prompts_generated": false
+}

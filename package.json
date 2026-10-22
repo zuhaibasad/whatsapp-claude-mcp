@@ -13,6 +13,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "build:mcpb": "node scripts/build-mcpb.mjs",
+    "smoke:mcpb": "node scripts/smoke-mcpb.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint .",
     "test": "vitest run",

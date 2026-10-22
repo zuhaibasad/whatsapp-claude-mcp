@@ -132,6 +132,7 @@ describe('read tools', () => {
 describe('get_status', () => {
   it('reports account, counts and daemon state', async () => {
     h.store.setMeta('last_sync_at', String(T0 - 180));
+    h.store.setMeta('collector_state', 'live');
     h.store.insertMessage(msg());
     const r = await h.call('get_status');
     expect(r.json).toMatchObject({
@@ -143,7 +144,7 @@ describe('get_status', () => {
     const h2 = harness({ readLock: () => null });
     const r = await h2.call('get_status');
     expect(r.json.daemon_running).toBe(false);
-    expect(r.json.warnings.join(' ')).toContain('daemon not running');
+    expect(r.json.warnings.join(' ')).toContain('collector is not running');
     h2.cleanup();
   });
   it('does not fail when not initialised', async () => {
