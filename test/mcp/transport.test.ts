@@ -40,7 +40,8 @@ describe('MCP over a linked in-memory transport', () => {
     const names = list.result.tools.map((t: { name: string }) => t.name).sort();
     expect(names).toEqual([
       'export_items', 'get_chat_info', 'get_mentions', 'get_messages', 'get_new_messages', 'get_status',
-      'list_chats', 'list_items', 'mark_reviewed', 'save_items', 'search_messages', 'update_item',
+      'list_chats', 'list_items', 'mark_reviewed', 'open_setup', 'save_items', 'search_messages', 'set_chat_inclusion',
+      'update_item', 'wait_for_sync',
     ]);
     for (const t of list.result.tools) expect(t.description.length).toBeGreaterThan(40);
 

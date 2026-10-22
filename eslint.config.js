@@ -4,7 +4,7 @@ import tseslint from 'typescript-eslint';
 const WA_LIB = ['baileys', '@whiskeysockets/baileys', 'whatsapp-web.js'];
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', '.wa-bridge/**', '.agents/**', '.claude/**'] },
+  { ignores: ['build/**', 'dist/**', 'node_modules/**', 'coverage/**', '.wa-bridge/**', '.agents/**', '.claude/**'] },
   ...tseslint.configs.recommended,
   {
     files: ['**/*.ts'],
