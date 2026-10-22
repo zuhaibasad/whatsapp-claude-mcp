@@ -34,3 +34,8 @@ Newest first. Each entry: date, decision, reason, alternatives.
 
 ## 2026-10-21 — MCP: `@modelcontextprotocol/server` 2.x (stdio)
 - **Why:** current stable official SDK. `@modelcontextprotocol/sdk` 1.x is the fallback.
+
+## 2026-10-22 — Targets: Claude Desktop + Claude Code (IDE/desktop/CLI); no claude.ai web
+- **Why:** claude.ai web can only reach remote tools, which would expose WhatsApp data to the internet and break the local-only rule. Desktop and Claude Code run local tools.
+- **Consequence:** the setup UI is a local web page served by the service (works everywhere), plus the same UI as an in-chat MCP App panel in Desktop. No terminal for end users. Data moves to a per-user data dir.
+- **Premium ideas** (voice notes, call items, call transcription, claude.ai via tunnel) are on hold in `docs/ROADMAP.md`.

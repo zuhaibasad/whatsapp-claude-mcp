@@ -207,11 +207,17 @@ Three layers, all run in `npm test` and CI:
 
 ---
 
-## 11. Onboarding v2 — non-technical users on Claude Desktop (draft, 2026-10-22)
+## 11. Onboarding v2 — non-technical users on Claude Desktop + Claude Code (draft, 2026-10-22)
 
 **Goal:** a friend installs one file in Claude Desktop, says "set up WhatsApp" to Claude, and completes everything through clicks in an in-chat panel. No terminal, ever.
 
-**Target:** Claude Desktop (Windows first). claude.ai web is out of scope, because it cannot reach local tools without breaking "local only" (see ROADMAP). Claude Code is deferred.
+**Targets (decided 2026-10-22):** Claude Desktop, Claude Code (VS Code extension / desktop app) and the Claude Code CLI, Windows first. **claude.ai web is out**, because it cannot reach local tools without exposing data to the internet.
+
+**UI strategy:** one single-file HTML UI with two hosts:
+- **Primary:** served by the local service at `http://127.0.0.1:<port>/setup?token=…`. This works in every target, and Claude gives or opens the link.
+- **Desktop enhancement:** the same UI shown in-chat as an MCP App panel, where supported.
+
+**Install:** a `.mcpb` Desktop Extension for Desktop, and a Claude Code plugin (MCP server + skills) for Claude Code. Both are built from the same `dist/`.
 
 ```mermaid
 flowchart LR
