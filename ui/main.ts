@@ -4,10 +4,10 @@ import { pickHost, type Host } from './host.js';
 import { createMockHost } from './dev-mock.js';
 import { safeSvg } from './svg.js';
 import {
-  accountLabel, applyToVisible, channelCounts, displayName, doneSummaryLine, filterRows, initialSelection, opensPicker,
+  accountLabel, applyToVisible, channelCounts, disconnectKeepData, DISCONNECT_OPTIONS, displayName, doneSummaryLine, filterRows, initialSelection, opensDisconnect, opensPicker,
   relativeTime, screenFor, selectionCounts, selectionHeader, shouldPoll, showPermissionsStep, subPhone, tabCounts,
   unreadLabel, visibleRange,
-  type Screen, type SelectionCounts, type SortMode, type Tab,
+  type DisconnectChoice, type Screen, type SelectionCounts, type SortMode, type Tab,
 } from './logic.js';
 
 type Child = Node | string | null | undefined;
@@ -32,6 +32,8 @@ let host: Host;
 let state: SetupState | null = null;
 let stateAt = 0;
 let editing = false;
+let disconnecting = false;       // the disconnect confirmation is open
+let disconnectChoice: DisconnectChoice | null = null;
 let doneLocal = false;
 let entryChats = false;          // opened straight to the picker ("Add a chat")
 let closeVariant = false;        // last save came from a later visit, not first-time setup
@@ -55,7 +57,7 @@ function currentScreen(): Screen {
   if (!state) return 'syncing';
   if (permissionsPending) return 'permissions';
   if (doneLocal && (state.step === 'done' || state.step === 'choose_chats')) return 'done';
-  return screenFor(state.step, editing);
+  return screenFor(state.step, editing, disconnecting);
 }
 
 function apply(next: SetupState): void {
@@ -121,6 +123,12 @@ function button(label: string, onClick: () => void, kind: 'primary' | 'secondary
   return h('button', { type: 'button', class: `btn ${kind}`, disabled, onclick: onClick }, label);
 }
 
+function disconnectLink(): HTMLButtonElement {
+  return button('Disconnect WhatsApp', () => {
+    disconnecting = true; disconnectChoice = null; shown = null; route();
+  }, 'link');
+}
+
 function spinner(): HTMLElement {
   return h('div', { class: 'spinner', role: 'presentation' });
 }
@@ -158,6 +166,7 @@ const renderers: Record<Screen, () => void> = {
     show(
       h('h1', {}, 'Connect your WhatsApp'),
       h('p', { class: 'lead' }, 'Keep your phone nearby. You will scan a code with it in the next step.'),
+      state?.error ? h('p', { class: 'notice', role: 'status' }, state.error) : null,
       h('div', { class: 'actions' }, go),
     );
   },
@@ -220,6 +229,7 @@ const renderers: Record<Screen, () => void> = {
         h('div', { class: 'actions' }, button('Change chats', () => {
           editing = true; doneLocal = false; shown = null; route();
         }, 'link')),
+        h('div', { class: 'actions' }, disconnectLink()),
       );
       return;
     }
@@ -239,6 +249,43 @@ const renderers: Record<Screen, () => void> = {
       h('div', { class: 'actions' }, button('Change chats', () => {
         editing = true; doneLocal = false; shown = null; route();
       }, 'link')),
+      h('div', { class: 'actions' }, disconnectLink()),
+    );
+  },
+
+  disconnect() {
+    const warn = h('p', { class: 'muted', id: 'dc-detail', 'aria-live': 'polite' }, 'Choose one option to continue.');
+    const go = button('Disconnect WhatsApp', () => {
+      const keepData = disconnectKeepData(disconnectChoice);
+      if (keepData === null) return;
+      go.disabled = true;
+      void run(async () => {
+        const next = await host.call('disconnect', { keepData });
+        disconnecting = false; disconnectChoice = null; doneLocal = false; editing = false; picker = null;
+        shown = null;
+        apply(next);
+      });
+    }, 'primary', true);
+
+    go.classList.add('danger');
+    const options = DISCONNECT_OPTIONS.map((o) => {
+      const input = h('input', { type: 'radio', name: 'dc', value: o.value, id: `dc-${o.value}` });
+      input.addEventListener('change', () => {
+        disconnectChoice = o.value;
+        warn.textContent = o.detail;
+        go.textContent = o.button;
+        go.disabled = false;
+      });
+      return h('label', { class: `choice${o.value === 'delete' ? ' risky' : ''}` }, input, h('span', {}, o.label));
+    });
+    show(
+      h('h1', {}, 'Disconnect WhatsApp?'),
+      h('p', { class: 'lead' }, `This removes wa-bridge from the linked devices of ${accountLabel(state ?? { account: null })}. Claude will no longer see new messages.`),
+      h('div', { class: 'choices', role: 'radiogroup', 'aria-label': 'What should happen to your data?' }, ...options),
+      warn,
+      h('div', { class: 'actions split' }, button('Cancel', () => {
+        disconnecting = false; disconnectChoice = null; shown = null; route();
+      }, 'link'), go),
     );
   },
 
@@ -449,7 +496,8 @@ async function boot(): Promise<void> {
   if (state) {
     let initial = null;
     try { initial = await host.initialScreen(); } catch { /* optional */ }
-    if (opensPicker(initial, state.step)) { entryChats = true; editing = true; shown = null; route(); }
+    if (opensDisconnect(initial, state.step)) { disconnecting = true; shown = null; route(); }
+    else if (opensPicker(initial, state.step)) { entryChats = true; editing = true; shown = null; route(); }
   } else route();
 }
 

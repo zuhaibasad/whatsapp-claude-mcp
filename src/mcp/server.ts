@@ -1,9 +1,9 @@
 import { registerAppTool } from '@modelcontextprotocol/ext-apps/server';
 import { McpServer, type CallToolResult } from '@modelcontextprotocol/server';
 import { z } from 'zod';
-import { loadConfig } from '../config/index.js';
+import { findChatNote, loadChatNotes, loadConfig } from '../config/index.js';
 import { computeRules, currentSelection, writeSelection, type ChatChoice } from '../config/selection.js';
-import type { Config, Store } from '../core/contracts.js';
+import type { ChatNote, Config, Store } from '../core/contracts.js';
 import { resolvePaths, type DataPaths } from '../core/paths.js';
 import type { Chat, ItemCategory, StoredMessage } from '../core/types.js';
 import { isoInZone, itemRow, writeItemsExport, ExportError } from '../export/index.js';
@@ -146,6 +146,18 @@ function messageJson(m: StoredMessage, c: Ctx): Json {
   };
 }
 
+// T20: per-chat guidance from departments.yaml `chats:`; read at most once per tool call.
+const chatNotesCache = new WeakMap<Ctx, ChatNote[]>();
+function chatNoteField(c: Ctx, chat: { id: string; name: string | null }): { chat_note?: { department: string | null; note: string | null } } {
+  let notes = chatNotesCache.get(c);
+  if (!notes) {
+    try { notes = loadChatNotes(c.paths); } catch { notes = []; } // a broken yaml must not break reading
+    chatNotesCache.set(c, notes);
+  }
+  const n = findChatNote(notes, chat);
+  return n ? { chat_note: { department: n.department, note: n.note } } : {};
+}
+
 /** Counts characters of text in messages so one response cannot flood the context. */
 class Budget {
   private used = 0;
@@ -285,12 +297,12 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
         for (const m of ch.messages) {
           if (!budget.take(m, c)) {
             truncated = true;
-            if (messages.length > 0) chats.push({ id: ch.chat.id, name: ch.chat.name, messages });
+            if (messages.length > 0) chats.push({ id: ch.chat.id, name: ch.chat.name, ...chatNoteField(c, ch.chat), messages });
             break outer;
           }
           messages.push(messageJson(m, c));
         }
-        chats.push({ id: ch.chat.id, name: ch.chat.name, messages });
+        chats.push({ id: ch.chat.id, name: ch.chat.name, ...chatNoteField(c, ch.chat), messages });
       }
       return { since: since === 'last_review' ? 'last_review' : isoInZone(since, c.config.timezone), truncated, chats };
     });
@@ -322,7 +334,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
         }
         messages.push(messageJson(m, c));
       }
-      return { chat: { id: chat.id, name: chat.name }, truncated, messages };
+      return { chat: { id: chat.id, name: chat.name, ...chatNoteField(c, chat) }, truncated, messages };
     });
 
   tool('search_messages',
@@ -603,8 +615,11 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
   };
 
   plain('whatsapp_status',
-    'Check whether WhatsApp is linked, whether the collector is up to date, and any warnings. Optionally waits for the collector to catch up first. Local check only.',
-    z.object({ wait_for_sync_seconds: z.number().int().min(0).max(120).optional().describe('default 0') }),
+    'Check whether WhatsApp is linked, whether the collector is up to date, and any warnings. Optionally waits for the collector to catch up first. With diagnose true, also runs a health check (folder, key, connection, disk) with plain-language fixes: use it when something seems broken. Local check only.',
+    z.object({
+      wait_for_sync_seconds: z.number().int().min(0).max(120).optional().describe('default 0'),
+      diagnose: z.boolean().optional().describe('run the health check and include its results'),
+    }),
     { readOnlyHint: true },
     async (a) => {
       const secs = typeof a.wait_for_sync_seconds === 'number' ? a.wait_for_sync_seconds : 0;
@@ -621,6 +636,14 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       }
       if (sync) out.sync = sync;
       if (warning) out.warnings = [...((out.warnings as string[] | undefined) ?? []), warning];
+      if (a.diagnose === true) {
+        try {
+          const ops = (await needHost(5_000)).ops();
+          out.diagnosis = (await ops.diagnose()) as unknown as Json;
+        } catch (e) {
+          out.diagnosis_error = `could not run the health check: ${e instanceof Error ? e.message : 'unknown'}`;
+        }
+      }
       return text(out);
     });
 

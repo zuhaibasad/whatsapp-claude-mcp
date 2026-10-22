@@ -117,7 +117,7 @@ export async function startControlServer(
           if (!core.browserTokens.consume(t)) return deny(res, 403, 'bad browser token');
           const { id } = sessions.create();
           res.writeHead(302, {
-            Location: url.searchParams.get('screen') === 'chats' ? '/setup?screen=chats' : '/setup',
+            Location: ['chats', 'disconnect'].includes(url.searchParams.get('screen') ?? '') ? `/setup?screen=${url.searchParams.get('screen')}` : '/setup',
             'Set-Cookie': `${cookieName()}=${id}; HttpOnly; SameSite=Strict; Path=/`,
             'Cache-Control': 'no-store',
           });
@@ -184,12 +184,23 @@ export async function startControlServer(
           const ms = typeof body.timeoutMs === 'number' && body.timeoutMs >= 0 ? Math.min(body.timeoutMs, 600_000) : 30_000;
           return send(res, 200, await core.waitForSync(ms));
         }
+        case 'disconnect': {
+          // Destructive: only a user action may do this. A browser session, or a single-use disconnect nonce that was
+          // embedded in the panel HTML. The control token alone is NOT enough.
+          const nonce = req.headers['x-disconnect-nonce'];
+          const proved = isSession || core.disconnectNonces.consume(typeof nonce === 'string' ? nonce : undefined);
+          if (!proved) return deny(res, 403, 'disconnect needs the setup panel or a browser session');
+          if (typeof body.keepData !== 'boolean') throw new HostError(400, 'keepData must be true or false');
+          return send(res, 200, await core.disconnectVerified({ keepData: body.keepData }));
+        }
+        case 'diagnose':
+          return send(res, 200, await core.diagnose());
         case 'mint-nonce':
           if (!isControl) return deny(res, 403, 'control token required');
-          return send(res, 200, await core.mintNonce());
+          return send(res, 200, await core.mintNonce(body.kind === 'disconnect' ? 'disconnect' : 'accept'));
         case 'open-setup':
           if (!isControl) return deny(res, 403, 'control token required');
-          return send(res, 200, await core.openSetup(body.screen === 'chats' ? 'chats' : 'auto'));
+          return send(res, 200, await core.openSetup(body.screen === 'chats' || body.screen === 'disconnect' ? body.screen : 'auto'));
         default:
           return send(res, 404, { error: 'not found' });
       }

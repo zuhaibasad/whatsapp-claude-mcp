@@ -3,32 +3,47 @@
 # Keywords are words that often appear in that department's messages.
 # Examples show the kind of message that belongs there. English, Roman Urdu and mixed are all fine.
 
-- name: ERP
-  keywords: [erp, invoice, purchase order, inventory, stock]
-  examples:
-    - "ERP mein invoice post nahi ho raha, urgent check karein"
-    - "Stock report ERP mein update nahi hui, please dekh lein"
+departments:
+  - name: ERP
+    keywords: [erp, invoice, purchase order, inventory, stock]
+    examples:
+      - "ERP mein invoice post nahi ho raha, urgent check karein"
+      - "Stock report ERP mein update nahi hui, please dekh lein"
 
-- name: IT
-  keywords: [vpn, password, laptop, server, network]
-  examples:
-    - "VPN connect nahi ho raha, koi restart kar sakta hai?"
-    - "Mera laptop ka password reset karna hai, ticket kahan raise karun"
+  - name: IT
+    keywords: [vpn, password, laptop, server, network]
+    examples:
+      - "VPN connect nahi ho raha, koi restart kar sakta hai?"
+      - "Mera laptop ka password reset karna hai, ticket kahan raise karun"
 
-- name: Finance
-  keywords: [payment, salary, bank, reimbursement, budget]
-  examples:
-    - "Client ki payment abhi tak nahi aayi, finance se confirm karein"
-    - "Reimbursement ka form submit kar diya hai, approval kab tak hogi?"
+  - name: Finance
+    keywords: [payment, salary, bank, reimbursement, budget]
+    examples:
+      - "Client ki payment abhi tak nahi aayi, finance se confirm karein"
+      - "Reimbursement ka form submit kar diya hai, approval kab tak hogi?"
 
-- name: Sales
-  keywords: [quote, deal, lead, discount, demo]
-  examples:
-    - "Is client ko quote aaj bhejna hai, discount approval chahiye"
-    - "New lead ka follow-up karna hai, demo kab schedule kar sakte hain?"
+  - name: Sales
+    keywords: [quote, deal, lead, discount, demo]
+    examples:
+      - "Is client ko quote aaj bhejna hai, discount approval chahiye"
+      - "New lead ka follow-up karna hai, demo kab schedule kar sakte hain?"
 
-- name: Ops
-  keywords: [delivery, shipment, dispatch, vendor, warehouse]
-  examples:
-    - "Warehouse se dispatch late ho raha hai, vendor ko call karein"
-    - "Shipment ka tracking update nahi mili, kal tak deliver hona tha"
+  - name: Ops
+    keywords: [delivery, shipment, dispatch, vendor, warehouse]
+    examples:
+      - "Warehouse se dispatch late ho raha hai, vendor ko call karein"
+      - "Shipment ka tracking update nahi mili, kal tak deliver hona tha"
+
+# Per-chat notes (optional). Guidance for Claude about a specific chat; it never changes which chats are read.
+# "chat" is the chat's name (any capitalisation) or its id. "department" and "note" are both optional.
+# You can also just tell Claude, e.g. "remember that the ERP group is for supplier invoices".
+#
+# chats:
+#   - chat: "ERP Support"
+#     department: ERP
+#     note: "Supplier invoices and purchase orders. 'Invoice' here means a supplier invoice."
+#   - chat: "Ali Vendor PM"
+#     note: "Ali = vendor project manager. 'Kal tak' from Ali is a firm deadline, urgent maanein."
+#   - chat: "Ops Karachi"
+#     department: Ops
+#     note: "Dispatch aur delivery ke updates. 'Maal nikal gaya' matlab shipment dispatch ho chuki hai."

@@ -10,6 +10,7 @@ import { mcpCommand } from './commands/mcp.js';
 import { chatsCommand, newCommand, purgeCommand, searchCommand } from './commands/read.js';
 import { registerChatSelection } from './commands/select.js';
 import { statusCommand } from './commands/status.js';
+import { doctorCommand } from './commands/doctor.js';
 import { unlinkCommand } from './commands/unlink.js';
 import { defaultDeps, type CliDeps } from './deps.js';
 import { CliError, realIo, type Io } from './io.js';
@@ -120,6 +121,11 @@ export function buildProgram(io: Io, deps: CliDeps, setExit: (code: number) => v
   program.command('mcp')
     .description('run the MCP server on stdio (for Claude)')
     .action(() => run(() => mcpCommand({ project: project() }, io, deps))());
+
+  program.command('doctor')
+    .description('check the data folder, key, connection and disk, with plain-language fixes')
+    .option('--json', 'machine-readable output')
+    .action((o: { json?: boolean }) => run(() => doctorCommand({ project: project(), json: o.json }, io, deps))());
 
   program.command('unlink')
     .description('remove the linked device from WhatsApp and delete the local session')

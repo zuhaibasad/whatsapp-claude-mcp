@@ -106,6 +106,11 @@ export function createMockHost(): Host {
         case 'state': return snapshot() as never;
         case 'startLink': go('linking'); return snapshot() as never;
         case 'cancelLink': go('ready_to_link'); return snapshot() as never;
+        case 'disconnect': {
+          const keep = (args[0] as { keepData: boolean }).keepData;
+          go(keep ? 'ready_to_link' : 'needs_accept');
+          return snapshot() as never;
+        }
         case 'chatRows': return rows as never;
         case 'submitSelection': {
           selected = (args[0] as string[] | null) ?? null;

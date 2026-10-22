@@ -7,6 +7,7 @@ import type { KeyringBackend } from '../core/contracts.js';
 import { defaultDataDir, legacyWindowsDataDir, type DataPaths } from '../core/paths.js';
 import { createMasterKeyStore, deriveDbKey, keychainAccountId, openEncryptedDb } from '../crypto/index.js';
 import { SqliteStore } from '../store/index.js';
+import { backupBeforeMigration } from './backup.js';
 
 interface Log {
   info(o: object, msg: string): void;
@@ -159,6 +160,7 @@ function run(legacy: string, newDir: string, staging: string, opts: MigrateOpts)
   // 4. move the databases into place (store.db last) and record where they came from
   if (hasAuth) moveDb(staging, newDir, 'auth.db');
   moveDb(staging, newDir, 'store.db');
+  backupBeforeMigration(newDir, readBack, { now: opts.now, onError: (e) => log?.warn({ err: e instanceof Error ? e.message : String(e) }, 'backup before migration failed') });
   const db = openEncryptedDb(path.join(newDir, 'store.db'), deriveDbKey(readBack, 'store'));
   try {
     const store = new SqliteStore(db);

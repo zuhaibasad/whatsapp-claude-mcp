@@ -19,9 +19,10 @@ description: Guided first-time install of wa-bridge: Node check, init, linking W
 4. **Daemon.** Run, or ask the user to run, `wa-bridge daemon start --detach`. When `wa-bridge daemon install` is available (Phase 3), offer it so collection survives reboots.
 5. **Verify.** Run `wa-bridge status` and call `mcp__wa-bridge__whatsapp_status`. Expect `link_status: linked` and `daemon_running: true`. Otherwise read `warnings`, check `.wa-bridge/daemon.log` (never paste message text) and explain the next step.
 6. **Chats.** Run `wa-bridge chats --all`, then help edit `.wa-bridge/config.yaml`: `my_names` (names and nicknames, for mention detection), `allowlist` / `denylist` (denylist wins), `include_groups`, `include_direct_chats` (off by default), `retention_days`, `timezone`. Suggest denying personal/family groups the user does not want read. Edits apply within about a minute; excluded chats are not stored at all.
-7. **Departments.** Help edit `.wa-bridge/departments.yaml` (name, keywords, examples; Roman Urdu examples are fine) and `priorities.yaml`.
-8. **Try it.** Run the `wa-daily-brief` skill once and review the result with the user.
-9. **Schedule.** Offer a scheduled task (for example 09:00 and 17:00 on weekdays) running `wa-daily-brief`, using Claude's own scheduling. Ask before creating it.
+7. **Per-chat notes, disconnecting, health.** `departments.yaml` also takes a `chats:` list (`chat`, `department`, `note`) for per-chat guidance. To disconnect/unlink WhatsApp, call `whatsapp_setup` with `screen: "disconnect"`; the user confirms in the panel (you cannot do it yourself). If something seems broken, call `whatsapp_status` with `diagnose: true` and explain the failed checks and their fixes.
+8. **Departments.** Help edit `.wa-bridge/departments.yaml` (name, keywords, examples; Roman Urdu examples are fine) and `priorities.yaml`.
+9. **Try it.** Run the `wa-daily-brief` skill once and review the result with the user.
+10. **Schedule.** Offer a scheduled task (for example 09:00 and 17:00 on weekdays) running `wa-daily-brief`, using Claude's own scheduling. Ask before creating it.
 
 ## Output format
 One numbered step at a time:
