@@ -204,3 +204,45 @@ Three layers, all run in `npm test` and CI:
 **Phase 2:** MCP server with all tools → items + export → `departments.yaml` / `priorities.yaml` → 5 skills.
 
 **Phase 3:** `daemon install|uninstall|start|stop` (Task Scheduler / launchd / systemd --user) → Claude install flow (`.mcp.json`, copy skills, run `wa-setup`) → README (warning first, install, uninstall) → manual test checklist (start with a secondary number).
+
+---
+
+## 11. Onboarding v2 — non-technical users on Claude Desktop (draft, 2026-10-22)
+
+**Goal:** a friend installs one file in Claude Desktop, says "set up WhatsApp" to Claude, and completes everything through clicks in an in-chat panel. No terminal, ever.
+
+**Target:** Claude Desktop (Windows first). claude.ai web is out of scope, because it cannot reach local tools without breaking "local only" (see ROADMAP). Claude Code is deferred.
+
+```mermaid
+flowchart LR
+  subgraph Desktop["Claude Desktop"]
+    Chat[Chat] --> Panel["MCP App panel<br/>(setup wizard, chat picker)"]
+  end
+  Chat -- tools --> MCP["wa-bridge MCP server<br/>(Desktop extension, .mcpb)"]
+  Panel -- app-only tools --> MCP
+  MCP -- "localhost control API<br/>(token)" --> SVC["wa-bridge service<br/>(background, auto-start at login)"]
+  SVC <-- linked device --> WA[(WhatsApp)]
+  SVC --> Store[("encrypted store<br/>%APPDATA%/wa-bridge")]
+  MCP -- read --> Store
+```
+
+1. **Install:** a `.mcpb` Desktop Extension (one click). It contains the MCP server, the service and the UI.
+2. **"Set up WhatsApp":** Claude calls `open_setup`, and the **in-chat panel** (MCP App) shows:
+   - **Risk warning** with an **"I accept" button the user clicks**. It is an app-only action Claude cannot perform.
+   - The service is installed and started: keychain key, encrypted store, and auto-start at login, with a toggle.
+   - **Live QR code.** The panel polls the service through an app-only tool. Then it shows "Linked ✓, syncing…".
+   - **Chat picker:** search, Groups/DMs tabs, Select all / none, per-chat toggles, Save. This uses T11's `chooseChats`, `buildChatRows` and `writeSelection`. DM history from link time is kept only for chats the user picks.
+   - **Done:** Claude offers scheduled briefs.
+3. **Afterwards:** Claude manages everything by conversation. Tools for include/exclude, status, and relinking (the panel opens again when a QR is needed).
+
+**Architecture changes**
+- **Per-user data dir:** `%APPDATA%\wa-bridge`, `~/Library/Application Support/wa-bridge`, or `~/.local/share/wa-bridge`. `--project` is kept for development.
+- **The service replaces "daemon start".** It can run while unlinked, performs linking on request, and exposes a localhost-only control API (random port + token file in the data dir, readable by the user only). It is still the only process that talks to WhatsApp.
+- **The MCP server never talks to WhatsApp.** It reads the store and calls the service's control API (status, start link, QR, chat rows, apply selection).
+- **Fallback when the panel cannot render:** the same HTML is served by the service at `http://127.0.0.1:<port>/setup?token=…`, and Claude gives the link.
+
+**Open questions (research spike before building)**
+1. **Runtime for the service** when Claude Desktop is closed: bundle `node.exe` in the `.mcpb`, a Node single executable app, or reuse Desktop's Node (whose path may change with updates)? Native modules (`better-sqlite3-multiple-ciphers`, `@napi-rs/keyring`) must ship prebuilt for win-x64.
+2. **MCP Apps support** in our SDK (`@modelcontextprotocol/ext-apps` 2.x) and current Claude Desktop: app-only tool visibility, polling, and size limits for a 520-row picker.
+3. **Do app-only tool results stay local in Desktop?** Assume they may be logged with the conversation: show the QR only in the panel, and keep chat names minimal.
+4. **Auto-start on Windows:** a Task Scheduler entry at logon, per-user, no admin rights.
