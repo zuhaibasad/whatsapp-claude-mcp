@@ -8,6 +8,7 @@ import { loadConfig } from '../config/index.js';
 import { createMasterKeyStore, deriveDbKey, openEncryptedDb } from '../crypto/index.js';
 import { SqliteStore } from '../store/index.js';
 import { Backoff, shouldReconnect } from './backoff.js';
+import { HEALTH_TICK_MS, HealthMonitor, type HealthClock } from './health.js';
 import { Ingestor } from './ingest.js';
 import { acquireLock } from './lock.js';
 import { createWaClient, useDbAuthState, type DbAuthState } from './wa/index.js';
@@ -15,6 +16,8 @@ import { createWaClient, useDbAuthState, type DbAuthState } from './wa/index.js'
 export interface WaClientFactoryArgs {
   auth: DbAuthState;
   logger: Logger;
+  /** Factories should pass this to createWaClient({ onFrame }) so the collector can detect stalls. Optional. */
+  onFrame?: () => void;
 }
 
 export interface RunnerDeps {
@@ -93,6 +96,10 @@ export interface CollectorOptions {
   liveMaxMs?: number;
   /** Called on every collector state change. */
   onState?(s: CollectorState): void;
+  /** Test hooks for health monitoring. */
+  healthClock?: HealthClock;
+  healthTickMs?: number;
+  keepAliveIntervalMs?: number;
 }
 
 export interface CollectorHandle {
@@ -179,9 +186,17 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
   );
   ingestor.recomputeIncluded();
 
-  const client = waClientFactory({ auth, logger });
+  const health = new HealthMonitor({
+    writeMeta: (k, v) => store.setMeta(k, v),
+    ...(opts.healthClock ? { clock: opts.healthClock } : {}),
+    ...(opts.keepAliveIntervalMs ? { keepAliveIntervalMs: opts.keepAliveIntervalMs } : {}),
+  });
+  let socketOpen = false;
+  let forcing = false;
+  const client = waClientFactory({ auth, logger, onFrame: () => health.frame() });
 
   const touchSync = (): void => {
+    health.appEvent();
     armQuiet();
     const t = Date.now();
     if (t - lastSyncWrite < SYNC_THROTTLE_MS) return;
@@ -245,6 +260,44 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
     }, delay);
   };
 
+  // Closes the socket without logout and reconnects: at once (sleep/resume) or via backoff (stall).
+  const forceReconnect = async (reason: string, immediate: boolean): Promise<void> => {
+    if (stopped || forcing) return;
+    forcing = true;
+    try {
+      logger.warn({ reason }, 'forcing reconnect');
+      health.reconnect(reason);
+      health.disconnected();
+      socketOpen = false;
+      clearReconnect();
+      caughtUp = false;
+      setState('reconnecting');
+      try {
+        await client.close();
+      } catch (err) {
+        logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'client close failed');
+      }
+      attemptActive = false;
+      if (stopped) return;
+      if (immediate) connect();
+      else scheduleReconnect();
+    } finally {
+      forcing = false;
+    }
+  };
+
+  const healthTick = (): void => {
+    if (stopped || forcing) return;
+    const action = health.tick();
+    if (action === 'sleep') {
+      // A socket that is mid-connect is left alone; Baileys' connect timeout handles it.
+      if (attemptActive && !socketOpen) return;
+      void forceReconnect('sleep_resume', true);
+    } else if (action === 'stall') {
+      void forceReconnect('app_stall', false);
+    }
+  };
+
   const fatal = (reason: string, end: CollectorState): void => {
     void stop(reason, end);
   };
@@ -271,6 +324,8 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
         attemptActive = false;
         restartUsed = false;
         backoff.reset();
+        socketOpen = true;
+        health.connected();
         currentMe = { id: s.me.id, lid: s.me.lid };
         guarded('account', () => store.upsertAccount({
           id: s.me.id,
@@ -287,6 +342,9 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
         return;
       case 'close': {
         attemptActive = false;
+        socketOpen = false;
+        health.disconnected();
+        if (s.retry) health.reconnect(s.reason);
         guarded('status', () => store.setLinkStatus('disconnected'));
         logger.warn({ reason: s.reason, retry: s.retry }, 'connection closed');
         if (s.retry || s.reason === 'restart_required') setState('reconnecting');
@@ -320,9 +378,10 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
   client.on('chats', (c) => { touchSync(); guarded('chats', () => ingestor.onChats(c)); });
   client.on('groups', (g) => { touchSync(); guarded('groups', () => ingestor.onGroups(g)); });
   client.on('contacts', (c) => { touchSync(); guarded('contacts', () => ingestor.onContacts(c)); });
-  client.on('lid-map', (m) => guarded('lid-map', () => ingestor.onLidMap(m)));
-  client.on('activity', (a) => guarded('activity', () => ingestor.onActivity(a)));
+  client.on('lid-map', (m) => { health.appEvent(); guarded('lid-map', () => ingestor.onLidMap(m)); });
+  client.on('activity', (a) => { health.appEvent(); guarded('activity', () => ingestor.onActivity(a)); });
 
+  const healthTimer = setInterval(healthTick, opts.healthTickMs ?? HEALTH_TICK_MS);
   runRetention();
   const retentionTimer = setInterval(runRetention, HOUR_MS);
   const configTimer = setInterval(checkConfig, CONFIG_POLL_MS);
@@ -335,6 +394,8 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
       clearReconnect();
       clearInterval(retentionTimer);
       clearInterval(configTimer);
+      clearInterval(healthTimer);
+      health.flush(true);
       clearLiveTimers();
       try {
         await client.close();
@@ -362,7 +423,7 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
 export async function runDaemon(opts: { projectRoot: string; deps?: Partial<RunnerDeps> }): Promise<DaemonHandle> {
   const paths = resolvePaths(opts.projectRoot);
   const keyStore = (opts.deps?.keyStore ?? createMasterKeyStore)(paths.projectRoot);
-  const waClientFactory = opts.deps?.waClientFactory ?? ((a: WaClientFactoryArgs) => createWaClient({ auth: a.auth, logger: a.logger }));
+  const waClientFactory = opts.deps?.waClientFactory ?? ((a: WaClientFactoryArgs) => createWaClient({ auth: a.auth, logger: a.logger, ...(a.onFrame ? { onFrame: a.onFrame } : {}) }));
 
   fs.mkdirSync(paths.dataDir, { recursive: true });
   const lock = acquireLock(paths.lockFile);

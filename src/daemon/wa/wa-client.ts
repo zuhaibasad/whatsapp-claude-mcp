@@ -8,6 +8,8 @@ import type { Contact } from '../../core/types.js';
 import type {
   ChatMeta, ConnectionState, GroupMeta, RawMessage, WaClient, WaClientEvents,
 } from '../../core/contracts.js';
+import type { Agent } from 'node:https';
+import { createProxyAgent, proxyInfo } from '../health.js';
 import type { useDbAuthState } from './auth-state.js';
 import { activityOf, extractDelete, extractEdit, lidPairsOf, normalizeMessage, toNumber, toSeconds } from './normalize.js';
 
@@ -41,6 +43,12 @@ export interface CreateWaClientOptions {
   getMessage?: (key: WAMessageKey) => Promise<proto.IMessage | undefined>;
   /** Test hook. Default: Baileys' fetchLatestBaileysVersion (one network call per client, cached). */
   fetchVersion?: () => Promise<{ version: WAVersion; error?: unknown }>;
+  /** Called for every incoming websocket frame (health tracking). */
+  onFrame?: () => void;
+  /** Environment used to find a proxy (HTTPS_PROXY etc.). Default process.env. */
+  env?: NodeJS.ProcessEnv;
+  /** Test hook / override for the proxy agent. Default: built from the environment, none when no proxy applies. */
+  agent?: Agent;
 }
 
 export function mapDisconnectReason(statusCode: number | undefined): CloseReason {
@@ -117,6 +125,9 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
   let cachedVersion: WAVersion | undefined;
   let versionFetched = false;
   let meId = '';
+  const agent = opts.agent ?? createProxyAgent(opts.env);
+  const proxy = proxyInfo(opts.env);
+  logger.info(proxy.enabled ? { host: proxy.host } : {}, proxy.enabled ? 'proxy: on' : 'proxy: off');
 
   const emit = <E extends keyof WaClientEvents>(event: E, ...args: Parameters<WaClientEvents[E]>): void => {
     try {
@@ -193,6 +204,13 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
     const ev = current.ev;
     let groupsFetched = false;
     let caughtUpEmitted = false;
+
+    // Listen only: a frame arrived (keepalive acks included). Used for health tracking, nothing is sent.
+    const onFrame = opts.onFrame;
+    if (onFrame) {
+      const wsLike = (current as { ws?: { on?: (e: string, l: () => void) => void } }).ws;
+      if (wsLike?.on) wsLike.on('frame', () => { if (live()) onFrame(); });
+    }
 
     ev.on('connection.update', (u: BaileysEventMap['connection.update']) => {
       if (!live()) return;
@@ -315,6 +333,7 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
         logger: logger.child({ class: 'baileys' }, { level: 'warn' }),
         browser: opts.browser ?? defaultBrowser(),
         getMessage: opts.getMessage ?? (async () => undefined),
+        ...(agent ? { agent, fetchAgent: agent } : {}),
         ...(version ? { version } : {}),
       });
       sock = created;
