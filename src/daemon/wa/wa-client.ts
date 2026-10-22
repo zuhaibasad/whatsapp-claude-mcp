@@ -2,13 +2,14 @@
 // The socket lives in a closure and is never returned or exposed.
 import { EventEmitter } from 'node:events';
 import makeWASocket, { Browsers, DisconnectReason, fetchLatestBaileysVersion, jidNormalizedUser, proto } from 'baileys';
-import type { BaileysEventMap, Chat, Contact, GroupMetadata, WAMessage, WAMessageKey, WAVersion } from 'baileys';
+import type { BaileysEventMap, Chat, Contact as WaContact, GroupMetadata, WAMessage, WAMessageKey, WAVersion } from 'baileys';
 import type { Logger } from 'pino';
+import type { Contact } from '../../core/types.js';
 import type {
   ChatMeta, ConnectionState, GroupMeta, RawMessage, WaClient, WaClientEvents,
 } from '../../core/contracts.js';
 import type { useDbAuthState } from './auth-state.js';
-import { extractDelete, extractEdit, normalizeMessage, toNumber } from './normalize.js';
+import { activityOf, extractDelete, extractEdit, lidPairsOf, normalizeMessage, toNumber, toSeconds } from './normalize.js';
 
 type AuthHandle = Awaited<ReturnType<typeof useDbAuthState>>;
 type Sock = ReturnType<typeof makeWASocket>;
@@ -57,10 +58,11 @@ export function mapDisconnectReason(statusCode: number | undefined): CloseReason
 
 const NO_RETRY: CloseReason[] = ['logged_out', 'forbidden', 'replaced'];
 
-function chatTypeOf(id: string): 'group' | 'direct' | null {
+function chatTypeOf(id: string): 'group' | 'direct' | 'channel' | null {
   if (id.endsWith('@g.us')) return 'group';
+  if (id.endsWith('@newsletter')) return 'channel';
   if (id.endsWith('@s.whatsapp.net') || id.endsWith('@lid')) return 'direct';
-  return null; // broadcasts, newsletters, status
+  return null; // broadcasts, status
 }
 
 function toChatMeta(c: Partial<Chat>): ChatMeta | null {
@@ -68,6 +70,10 @@ function toChatMeta(c: Partial<Chat>): ChatMeta | null {
   const type = chatTypeOf(c.id);
   if (!type) return null;
   const meta: ChatMeta = { id: c.id, type, name: c.name ?? c.displayName ?? null };
+  const ts = toSeconds(c.conversationTimestamp ?? c.lastMessageRecvTimestamp);
+  if (ts > 0) meta.lastActivityAt = ts;
+  const unread = c.unreadCount === null || c.unreadCount === undefined ? undefined : toNumber(c.unreadCount);
+  if (unread !== undefined && unread >= 0) meta.unreadCount = unread; // -1 = "marked unread", not a count
   if (c.archived !== undefined) meta.archived = !!c.archived;
   if (c.muteEndTime !== undefined) {
     let end = toNumber(c.muteEndTime);
@@ -89,11 +95,17 @@ function toGroupMeta(g: GroupMetadata): GroupMeta {
   };
 }
 
-function toContact(c: Partial<Contact>): { id: string; name: string | null } | null {
+function toContact(c: Partial<WaContact>): (Partial<Contact> & { id: string }) | null {
   if (!c.id) return null;
-  const name = c.name ?? c.notify ?? c.verifiedName ?? null;
-  if (name === null) return null;
-  return { id: c.phoneNumber ?? c.id, name };
+  const out: Partial<Contact> & { id: string } = { id: c.id };
+  const phone = c.phoneNumber ?? (c.id.endsWith('@s.whatsapp.net') ? c.id : undefined);
+  const lid = c.lid ?? (c.id.endsWith('@lid') ? c.id : undefined);
+  if (phone) out.phoneJid = phone;
+  if (lid) out.lid = lid;
+  if (c.name) out.savedName = c.name;
+  if (c.notify) out.pushName = c.notify;
+  if (c.verifiedName) out.verifiedName = c.verifiedName;
+  return out;
 }
 
 export function createWaClient(opts: CreateWaClientOptions): WaClient {
@@ -130,6 +142,10 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
   function normalizeAll(msgs: WAMessage[], type: string): void {
     const out: RawMessage[] = [];
     for (const m of msgs) {
+      // Metadata for EVERY message (also chats the user excluded): no text leaves this block.
+      const act = activityOf(m, meId);
+      if (act) emit('activity', act);
+      for (const p of lidPairsOf(m)) emit('lid-map', p);
       const del = extractDelete(m);
       if (del) { emit('delete', del); continue; }
       const edit = extractEdit(m);
@@ -254,16 +270,23 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
       refetchGroup(current, gen, u.id);
     });
 
-    const onContacts = (list: Partial<Contact>[]): void => {
+    const onContacts = (list: Partial<WaContact>[]): void => {
       if (!live()) return;
-      const cs = list.map(toContact).filter((c): c is { id: string; name: string | null } => c !== null);
+      const cs = list.map(toContact).filter((c): c is Partial<Contact> & { id: string } => c !== null);
       if (cs.length) emit('contacts', cs);
+      for (const c of cs) if (c.lid && c.phoneJid) emit('lid-map', { lid: c.lid, phoneJid: c.phoneJid });
     };
     ev.on('contacts.upsert', onContacts);
     ev.on('contacts.update', onContacts);
 
+    ev.on('lid-mapping.update', (m: BaileysEventMap['lid-mapping.update']) => {
+      if (!live()) return;
+      if (m.lid && m.pn) emit('lid-map', { lid: m.lid, phoneJid: m.pn });
+    });
+
     ev.on('messaging-history.set', (h: BaileysEventMap['messaging-history.set']) => {
       if (!live()) return;
+      for (const m of h.lidPnMappings ?? []) if (m.lid && m.pn) emit('lid-map', { lid: m.lid, phoneJid: m.pn });
       onChats(h.chats);
       onContacts(h.contacts);
       normalizeAll(h.messages, 'history');

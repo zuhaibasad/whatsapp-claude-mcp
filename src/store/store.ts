@@ -4,7 +4,7 @@ import type {
   SearchHit, Store, StoreCounts, ChatSummary,
 } from '../core/contracts.js';
 import type {
-  Account, Chat, ChatType, Item, ItemInput, ItemStatus, MentionReason, MessageInput,
+  Account, Chat, ChatType, Contact, Item, ItemInput, ItemStatus, MentionReason, MessageInput,
   Participant, StoredMessage,
 } from '../core/types.js';
 import { migrate } from './schema.js';
@@ -31,7 +31,22 @@ function toChat(r: Row): Chat {
     id: String(r.id), type: String(r.type) as ChatType, name: s(r.name),
     participantCount: n(r.participant_count), muted: b(r.muted), archived: b(r.archived),
     included: b(r.included), lastMessageAt: n(r.last_message_at),
+    lastActivityAt: n(r.last_activity_at), unreadCount: n(r.unread_count),
   };
+}
+
+function toContact(r: Row): Contact {
+  return {
+    id: String(r.id), phoneJid: s(r.phone_jid), lid: s(r.lid), savedName: s(r.saved_name),
+    pushName: s(r.push_name), verifiedName: s(r.verified_name), updatedAt: Number(r.updated_at ?? 0),
+  };
+}
+
+/** Chat type from the JID suffix. */
+export function chatTypeFromJid(id: string): ChatType {
+  if (id.endsWith('@g.us')) return 'group';
+  if (id.endsWith('@newsletter')) return 'channel';
+  return 'direct';
 }
 
 function parseMentions(v: unknown): string[] {
@@ -153,6 +168,7 @@ export class SqliteStore implements Store {
     const map: [keyof Chat, string][] = [
       ['type', 'type'], ['name', 'name'], ['participantCount', 'participant_count'], ['muted', 'muted'],
       ['archived', 'archived'], ['included', 'included'], ['lastMessageAt', 'last_message_at'],
+      ['lastActivityAt', 'last_activity_at'], ['unreadCount', 'unread_count'],
     ];
     const cols: string[] = [];
     const vals: Param[] = [];
@@ -165,7 +181,7 @@ export class SqliteStore implements Store {
     }
     this.db.transaction(() => {
       this.run('INSERT OR IGNORE INTO chats(id, type) VALUES (?, ?)', chat.id, chat.type);
-      this.run(`UPDATE chats SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`, ...vals, chat.id);
+      if (cols.length > 0) this.run(`UPDATE chats SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE id = ?`, ...vals, chat.id);
     })();
   }
 
@@ -183,12 +199,65 @@ export class SqliteStore implements Store {
     const sql = `SELECT c.*, (SELECT count(*) FROM messages m WHERE m.chat_id = c.id AND m.is_from_me = 0
         AND m.ts > coalesce((SELECT u.reviewed_until FROM unread_state u WHERE u.chat_id = c.id), 0)) AS unreviewed
       FROM chats c ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
-      ORDER BY c.last_message_at DESC, c.id`;
+      ORDER BY max(coalesce(c.last_activity_at, 0), coalesce(c.last_message_at, 0)) DESC, c.id`;
     return this.all(sql, ...p).map((r) => ({ ...toChat(r), unreviewed: Number(r.unreviewed) }));
   }
 
   setChatIncluded(id: string, included: boolean): void {
     this.run('UPDATE chats SET included = ? WHERE id = ?', included ? 1 : 0, id);
+  }
+
+  upsertContact(c: Partial<Contact> & { id: string }): void {
+    this.db.transaction(() => {
+      const phoneJid = c.phoneJid ?? (c.id.endsWith('@s.whatsapp.net') ? c.id : null);
+      const lid = c.lid ?? (c.id.endsWith('@lid') ? c.id : null);
+      const keys = [...new Set([c.id, phoneJid, lid].filter((k): k is string => !!k))];
+      const ph = placeholders(keys.length);
+      const rows = this.all(
+        `SELECT * FROM contacts WHERE id IN (${ph}) OR phone_jid IN (${ph}) OR lid IN (${ph})`, ...keys, ...keys, ...keys,
+      );
+      const target = rows.find((r) => r.id === c.id) ?? rows[0];
+      const incoming = {
+        phone_jid: phoneJid, lid, saved_name: c.savedName ?? null, push_name: c.pushName ?? null,
+        verified_name: c.verifiedName ?? null,
+      };
+      const merged: Record<string, string | null> = { phone_jid: null, lid: null, saved_name: null, push_name: null, verified_name: null };
+      // precedence: incoming non-null > target > other duplicate rows
+      const ordered = [...(target ? [target] : []), ...rows.filter((r) => r !== target)];
+      for (const col of Object.keys(merged)) {
+        const inc = incoming[col as keyof typeof incoming];
+        merged[col] = inc ?? ordered.map((r) => s(r[col])).find((v) => v !== null) ?? null;
+      }
+      const id = target ? String(target.id) : c.id;
+      for (const r of rows) if (r !== target) this.run('DELETE FROM contacts WHERE id = ?', String(r.id));
+      this.run(
+        `INSERT INTO contacts(id, phone_jid, lid, saved_name, push_name, verified_name, updated_at) VALUES (?,?,?,?,?,?,?)
+         ON CONFLICT(id) DO UPDATE SET phone_jid = excluded.phone_jid, lid = excluded.lid, saved_name = excluded.saved_name,
+           push_name = excluded.push_name, verified_name = excluded.verified_name, updated_at = excluded.updated_at`,
+        id, merged.phone_jid ?? null, merged.lid ?? null, merged.saved_name ?? null, merged.push_name ?? null,
+        merged.verified_name ?? null, c.updatedAt ?? Math.floor(Date.now() / 1000),
+      );
+    })();
+  }
+
+  getContact(idOrPhoneOrLid: string): Contact | null {
+    const r = this.one('SELECT * FROM contacts WHERE id = ? OR phone_jid = ? OR lid = ? ORDER BY (id = ?) DESC LIMIT 1',
+      idOrPhoneOrLid, idOrPhoneOrLid, idOrPhoneOrLid, idOrPhoneOrLid);
+    return r ? toContact(r) : null;
+  }
+
+  linkLid(lid: string, phoneJid: string): void {
+    this.upsertContact({ id: phoneJid, phoneJid, lid });
+  }
+
+  touchChatActivity(chatId: string, ts: number, unreadCount?: number | null, included = false): void {
+    this.db.transaction(() => {
+      this.run('INSERT OR IGNORE INTO chats(id, type, included) VALUES (?, ?, ?)', chatId, chatTypeFromJid(chatId), included ? 1 : 0);
+      if (ts > 0) this.run('UPDATE chats SET last_activity_at = max(coalesce(last_activity_at, 0), ?) WHERE id = ?', ts, chatId);
+      if (unreadCount !== undefined && unreadCount !== null) {
+        this.run('UPDATE chats SET unread_count = ? WHERE id = ?', unreadCount, chatId);
+      }
+    })();
   }
 
   replaceParticipants(chatId: string, participants: Omit<Participant, 'chatId'>[]): void {
@@ -212,8 +281,7 @@ export class SqliteStore implements Store {
 
   insertMessage(msg: MessageInput): boolean {
     return this.db.transaction((): boolean => {
-      const type: ChatType = msg.chatId.endsWith('@g.us') ? 'group' : 'direct';
-      this.run('INSERT OR IGNORE INTO chats(id, type, included) VALUES (?, ?, 1)', msg.chatId, type);
+      this.run('INSERT OR IGNORE INTO chats(id, type, included) VALUES (?, ?, 1)', msg.chatId, chatTypeFromJid(msg.chatId));
       const changes = this.run(
         `INSERT OR IGNORE INTO messages(id, chat_id, sender_id, sender_name, ts, text, quoted_id, quoted_sender_id,
            mentions, mention_reason, is_from_me, has_media, media_type, edited, deleted)
@@ -222,7 +290,8 @@ export class SqliteStore implements Store {
         JSON.stringify(msg.mentions), msg.mentionReason, msg.isFromMe ? 1 : 0, msg.hasMedia ? 1 : 0, msg.mediaType,
       );
       if (changes === 0) return false;
-      this.run('UPDATE chats SET last_message_at = max(coalesce(last_message_at, 0), ?) WHERE id = ?', msg.ts, msg.chatId);
+      this.run(`UPDATE chats SET last_message_at = max(coalesce(last_message_at, 0), ?),
+        last_activity_at = max(coalesce(last_activity_at, 0), ?) WHERE id = ?`, msg.ts, msg.ts, msg.chatId);
       this.run('UPDATE accounts SET last_message_at = max(coalesce(last_message_at, 0), ?)', msg.ts);
       return true;
     })();

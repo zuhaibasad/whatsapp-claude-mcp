@@ -95,6 +95,34 @@ function senderOf(m: WAMessage, meId: string): string {
   return isPn(alt) && !isPn(chat) ? alt : chat;
 }
 
+/** Seconds from a Baileys timestamp that may be a number, Long, or (rarely) milliseconds. */
+export function toSeconds(v: unknown): number {
+  const n = toNumber(v);
+  return n > 1e11 ? Math.floor(n / 1000) : n;
+}
+
+/** Metadata-only view of a message: when, where, who. No text. Null for status/broadcast lists or when ts is unknown. */
+export function activityOf(m: WAMessage, meId: string): { chatId: string; ts: number; pushName: string | null; senderId: string } | null {
+  const chatId = m.key?.remoteJid;
+  if (!chatId || chatId.endsWith('@broadcast')) return null;
+  const ts = toSeconds(m.messageTimestamp);
+  if (ts <= 0) return null;
+  return { chatId, ts, pushName: m.key.fromMe ? null : nonEmpty(m.pushName), senderId: senderOf(m, meId) };
+}
+
+/** LID <-> phone pairs that Baileys hands us on message keys (remoteJidAlt / participantAlt). */
+export function lidPairsOf(m: WAMessage): { lid: string; phoneJid: string }[] {
+  const out: { lid: string; phoneJid: string }[] = [];
+  const add = (a: string | null | undefined, b: string | null | undefined): void => {
+    if (!a || !b) return;
+    if (a.endsWith('@lid') && isPn(b)) out.push({ lid: a, phoneJid: b });
+    else if (b.endsWith('@lid') && isPn(a)) out.push({ lid: b, phoneJid: a });
+  };
+  add(m.key?.remoteJid, m.key?.remoteJidAlt);
+  add(m.key?.participant, m.key?.participantAlt);
+  return out;
+}
+
 export function normalizeMessage(m: WAMessage, meId: string): RawMessage | null {
   const chatId = m.key?.remoteJid;
   const id = m.key?.id;
@@ -115,7 +143,7 @@ export function normalizeMessage(m: WAMessage, meId: string): RawMessage | null 
     chatId,
     senderId: senderOf(m, meId),
     senderName: nonEmpty(m.pushName),
-    ts: toNumber(m.messageTimestamp),
+    ts: toSeconds(m.messageTimestamp),
     text,
     quotedId: nonEmpty(ci?.stanzaId),
     quotedSenderId: nonEmpty(ci?.participant),

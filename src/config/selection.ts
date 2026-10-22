@@ -15,6 +15,7 @@ export interface ChatChoice {
 export interface SelectionRules {
   includeGroups: boolean;
   includeDirectChats: boolean;
+  includeChannels: boolean;
   allowlist: ChatChoice[];
   denylist: ChatChoice[];
 }
@@ -22,17 +23,18 @@ export interface SelectionRules {
 export interface TypeDefaults {
   includeGroups: boolean;
   includeDirectChats: boolean;
+  includeChannels?: boolean;
 }
 
 /**
  * Picks, per chat type, the default (on/off) that needs the fewest list entries, then lists the exceptions.
- * Ties go to "on" for groups and "off" for direct chats. A type with no chats keeps `current`.
+ * Ties go to "on" for groups and "off" for direct chats and channels. A type with no chats keeps `current`.
  * Applying `isChatIncluded` with the result gives exactly `selectedIds` (ids not in `all` are ignored).
  */
 export function computeRules(
   all: ChatChoice[],
   selectedIds: ReadonlySet<string>,
-  current: TypeDefaults = { includeGroups: true, includeDirectChats: false },
+  current: TypeDefaults = { includeGroups: true, includeDirectChats: false, includeChannels: false },
 ): SelectionRules {
   const allowlist: ChatChoice[] = [];
   const denylist: ChatChoice[] = [];
@@ -48,7 +50,8 @@ export function computeRules(
   };
   const includeGroups = decide('group', current.includeGroups);
   const includeDirectChats = decide('direct', current.includeDirectChats);
-  return { includeGroups, includeDirectChats, allowlist, denylist };
+  const includeChannels = decide('channel', current.includeChannels ?? false);
+  return { includeGroups, includeDirectChats, includeChannels, allowlist, denylist };
 }
 
 /** The ids of the chats that the given config includes. Used to pre-check the picker. */
@@ -56,18 +59,51 @@ export function currentSelection(cfg: Config, all: ChatChoice[]): Set<string> {
   return new Set(all.filter((c) => isChatIncluded(cfg, c)).map((c) => c.id));
 }
 
+const digitsOf = (v: string): string => v.replace(/\D/g, '');
+
+/** "+<digits>" from a phone JID such as 923001234567@s.whatsapp.net (device suffix ignored), else null. */
+export function phoneFromJid(jid: string | null | undefined): string | null {
+  const m = /^(\d{5,})(?::\d+)?@s\.whatsapp\.net$/.exec(jid ?? '');
+  return m ? `+${m[1]}` : null;
+}
+
+/**
+ * Picker search: case-insensitive substring on name and id, and on phone digits when the query looks like a number
+ * (spaces, "+", "-", brackets ignored; a leading 0 is read as 92, so 03001234567 finds +923001234567).
+ * Pure and DOM-free; the UI uses the same logic.
+ */
+export function matchesQuery(row: { name: string | null; phone: string | null; id?: string }, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (needle === '') return true;
+  if ((row.name ?? '').toLowerCase().includes(needle)) return true;
+  if (row.id && row.id.toLowerCase().includes(needle)) return true;
+  if (row.phone && /^[\d\s+\-().]+$/.test(needle)) {
+    const qd = digitsOf(needle).replace(/^0/, '92');
+    if (qd.length > 0 && digitsOf(row.phone).includes(qd)) return true;
+  }
+  return false;
+}
+
 /**
  * Every chat in the store as picker rows: newest activity first (never-active last),
  * `preselected` = whether `config` currently includes the chat.
+ * Name: chat name, else the contact's saved / push / verified name. Contact is found by chat id (which may be a LID).
+ * Phone: from a phone-JID chat id, else from the contact's phone JID (LID mapping).
  */
-export function buildChatRows(store: Pick<Store, 'listChats'>, config: Config): ChatRow[] {
+export function buildChatRows(store: Pick<Store, 'listChats' | 'getContact'>, config: Config): ChatRow[] {
   const chats = store.listChats({});
   const selected = currentSelection(config, chats);
   return chats
-    .map((c): ChatRow => ({
-      id: c.id, name: c.name, type: c.type, phone: null, participantCount: c.participantCount,
-      lastMessageAt: c.lastMessageAt, unreadCount: null, preselected: selected.has(c.id),
-    }))
+    .map((c): ChatRow => {
+      const contact = c.type === 'direct' ? store.getContact(c.id) : null;
+      const name = c.name ?? contact?.savedName ?? contact?.pushName ?? contact?.verifiedName ?? null;
+      const phone = c.type === 'direct' ? (phoneFromJid(c.id) ?? phoneFromJid(contact?.phoneJid)) : null;
+      const last = Math.max(c.lastActivityAt ?? 0, c.lastMessageAt ?? 0);
+      return {
+        id: c.id, name, type: c.type, phone, participantCount: c.participantCount,
+        lastMessageAt: last > 0 ? last : null, unreadCount: c.unreadCount ?? null, preselected: selected.has(c.id),
+      };
+    })
     .sort((a, b) => (b.lastMessageAt ?? -1) - (a.lastMessageAt ?? -1) || a.id.localeCompare(b.id));
 }
 
@@ -106,7 +142,7 @@ function writeAtomic(file: string, text: string): void {
 }
 
 /**
- * Updates include_groups, include_direct_chats, allowlist and denylist in config.yaml. Other keys and comments stay.
+ * Updates include_groups, include_direct_chats, include_channels, allowlist and denylist in config.yaml. Other keys and comments stay.
  * Existing entries that name a chat in `all` (by id, or by name ignoring case) are replaced; other entries are kept.
  * New entries are chat ids with the chat name as a trailing comment. The file is replaced atomically.
  */
@@ -149,6 +185,7 @@ export function writeSelection(paths: DataPaths, rules: SelectionRules, all: Cha
 
   doc.set('include_groups', rules.includeGroups);
   doc.set('include_direct_chats', rules.includeDirectChats);
+  doc.set('include_channels', rules.includeChannels);
   update('allowlist', rules.allowlist);
   update('denylist', rules.denylist);
 

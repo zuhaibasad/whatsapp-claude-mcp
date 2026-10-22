@@ -18,10 +18,11 @@ function matchesEntry(entry: string, chat: FilterChat): boolean {
 
 /**
  * Precedence: denylist (false) > allowlist (true) > type default
- * (group -> includeGroups, direct -> includeDirectChats).
+ * (group -> includeGroups, direct -> includeDirectChats, channel -> includeChannels).
  */
 export function isChatIncluded(cfg: Config, chat: FilterChat): boolean {
   if (cfg.denylist.some((entry) => matchesEntry(entry, chat))) return false;
   if (cfg.allowlist.some((entry) => matchesEntry(entry, chat))) return true;
-  return chat.type === 'group' ? cfg.includeGroups : cfg.includeDirectChats;
+  if (chat.type === 'group') return cfg.includeGroups;
+  return chat.type === 'channel' ? cfg.includeChannels : cfg.includeDirectChats;
 }

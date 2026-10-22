@@ -147,7 +147,7 @@ describe('createWaClient', () => {
     expect(seen.groups.at(-1)).toEqual({ id: 'g1@g.us', subject: 'Renamed', participants: [{ id: '6@s.whatsapp.net', displayName: 'Bob', isAdmin: false }] });
 
     ev.emit('contacts.upsert', [{ id: '8@lid', phoneNumber: '8@s.whatsapp.net', name: 'Cara' }, { id: '9@s.whatsapp.net' }]);
-    expect(seen.contacts).toEqual([{ id: '8@s.whatsapp.net', name: 'Cara' }]);
+    expect(seen.contacts).toContainEqual({ id: '8@lid', phoneJid: '8@s.whatsapp.net', lid: '8@lid', savedName: 'Cara' });
 
     ev.emit('messaging-history.set', {
       chats: [{ id: 'h@g.us', name: 'Hist' }],

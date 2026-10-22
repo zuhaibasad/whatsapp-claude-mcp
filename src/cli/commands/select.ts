@@ -17,6 +17,7 @@ export interface SelectOpts {
   none?: boolean;
   groups?: string;
   direct?: string;
+  channels?: string;
   include?: string[];
   exclude?: string[];
 }
@@ -57,10 +58,11 @@ export async function selectCommand(opts: SelectOpts, io: Io, deps: CliDeps): Pr
   const paths = resolvePaths(opts.project);
   const groups = parseSetting('--groups', opts.groups);
   const direct = parseSetting('--direct', opts.direct);
+  const channels = parseSetting('--set-channels', opts.channels);
   if (opts.all && opts.none) throw new CliError('Use either --all or --none, not both.');
   const include = opts.include ?? [];
   const exclude = opts.exclude ?? [];
-  const changing = Boolean(opts.all || opts.none || groups || direct || include.length || exclude.length);
+  const changing = Boolean(opts.all || opts.none || groups || direct || channels || include.length || exclude.length);
 
   const { config } = loadConfig(paths);
   const { store, close } = openStore(paths, deps, { write: false });
@@ -74,18 +76,18 @@ export async function selectCommand(opts: SelectOpts, io: Io, deps: CliDeps): Pr
   const count = (set: Set<string>, type: string): number => all.filter((c) => c.type === type && set.has(c.id)).length;
   const total = (type: string): number => all.filter((c) => c.type === type).length;
   const summary = (set: Set<string>): string =>
-    `${count(set, 'group')}/${total('group')} groups, ${count(set, 'direct')}/${total('direct')} direct chats`;
+    `${count(set, 'group')}/${total('group')} groups, ${count(set, 'direct')}/${total('direct')} direct chats, ${count(set, 'channel')}/${total('channel')} channels`;
 
   if (!changing) {
     io.out(`Currently selected: ${summary(before)}.`);
-    io.out('Change it with: wa-bridge chats select --all | --none | --set-groups all|none | --set-direct all|none, or chats include/exclude <name|id>...');
+    io.out('Change it with: wa-bridge chats select --all | --none | --set-groups all|none | --set-direct all|none | --set-channels all|none, or chats include/exclude <name|id>...');
     return 0;
   }
 
   const next = new Set(before);
   if (opts.all) all.forEach((c) => next.add(c.id));
   if (opts.none) next.clear();
-  for (const [type, setting] of [['group', groups], ['direct', direct]] as const) {
+  for (const [type, setting] of [['group', groups], ['direct', direct], ['channel', channels]] as const) {
     if (!setting) continue;
     for (const c of all) {
       if (c.type !== type) continue;
@@ -111,7 +113,7 @@ export async function selectCommand(opts: SelectOpts, io: Io, deps: CliDeps): Pr
   show('Turned on', turnedOn);
   show('Turned off', turnedOff);
   if (turnedOn.length === 0 && turnedOff.length === 0) io.out('No change.');
-  io.out(`New chats: groups ${rules.includeGroups ? 'included' : 'excluded'}, direct chats ${rules.includeDirectChats ? 'included' : 'excluded'} by default.`);
+  io.out(`New chats: groups ${rules.includeGroups ? 'included' : 'excluded'}, direct chats ${rules.includeDirectChats ? 'included' : 'excluded'}, channels ${rules.includeChannels ? 'included' : 'excluded'} by default.`);
   io.out(`Saved to ${res.file}.`);
   if (turnedOn.length > 0) io.out('Note: a chat that is turned on only captures new messages from now on; its history is not downloaded again.');
   const lock = readLock(paths.lockFile);
@@ -133,13 +135,14 @@ export function registerChatSelection(
     .option('--none', 'select no chat')
     .option('--set-groups <mode>', 'all or none: select or deselect all groups')
     .option('--set-direct <mode>', 'all or none: select or deselect all direct chats')
+    .option('--set-channels <mode>', 'all or none: select or deselect all channels')
     .option('--include <chat...>', 'also select these chats (name or id)')
     .option('--exclude <chat...>', 'deselect these chats (name or id)')
     // `--all` is also an option of the parent `chats` listing, which consumes it first; optsWithGlobals sees both.
     .action((_o: unknown, cmd: Command) => {
-      const o = cmd.optsWithGlobals<{ all?: boolean; none?: boolean; setGroups?: string; setDirect?: string; include?: string[]; exclude?: string[] }>();
+      const o = cmd.optsWithGlobals<{ all?: boolean; none?: boolean; setGroups?: string; setDirect?: string; setChannels?: string; include?: string[]; exclude?: string[] }>();
       return run(() => selectCommand({
-        project: project(), all: o.all, none: o.none, groups: o.setGroups, direct: o.setDirect, include: o.include, exclude: o.exclude,
+        project: project(), all: o.all, none: o.none, groups: o.setGroups, direct: o.setDirect, channels: o.setChannels, include: o.include, exclude: o.exclude,
       }, io, deps))();
     });
   chats.command('include')

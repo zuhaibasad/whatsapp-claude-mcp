@@ -9,6 +9,7 @@ import { DaemonAlreadyRunningError, acquireLock } from '../daemon/lock.js';
 import { createWaClient } from '../daemon/wa/index.js';
 import { createHostClient } from './client.js';
 import { HolderCore } from './core.js';
+import { migrateLegacyDataDir } from './migrate.js';
 import { startControlServer, type ControlServer } from './server.js';
 import { HOST_VERSION, type HostDeps, type HostHandle, type HostOps, type HostRole } from './types.js';
 
@@ -45,6 +46,7 @@ export function resolveHostDeps(paths: DataPaths, over: Partial<HostDeps> = {}):
 /** Creates a host instance (no global state). Most callers use startHost. */
 export function createHost(paths: DataPaths, over: Partial<HostDeps> = {}): HostHandle {
   const deps = resolveHostDeps(paths, over);
+  migrateLegacyDataDir(paths, { keyring: deps.keyring, logger: deps.logger }); // T15: copy old %LOCALAPPDATA% data once
   const logger = deps.logger;
   const client = createHostClient(paths, { keyring: deps.keyring });
   let role: HostRole = 'follower';
