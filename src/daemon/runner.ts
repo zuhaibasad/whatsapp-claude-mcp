@@ -1,6 +1,7 @@
 // The daemon: lock, open DBs, connect to WhatsApp, ingest, reconnect with backoff, retention.
 import fs from 'node:fs';
 import type { Config, Db, MasterKeyStore, WaClient } from '../core/contracts.js';
+import type { CollectorState } from '../core/service.js';
 import { createLogger, type Logger } from '../core/logger.js';
 import { resolvePaths, type DataPaths } from '../core/paths.js';
 import { loadConfig } from '../config/index.js';
@@ -80,30 +81,40 @@ function configMtime(file: string): number {
   }
 }
 
-export async function runDaemon(opts: { projectRoot: string; deps?: Partial<RunnerDeps> }): Promise<DaemonHandle> {
-  const paths = resolvePaths(opts.projectRoot);
-  const keyStore = (opts.deps?.keyStore ?? createMasterKeyStore)(paths.projectRoot);
-  const waClientFactory = opts.deps?.waClientFactory ?? ((a: WaClientFactoryArgs) => createWaClient({ auth: a.auth, logger: a.logger }));
+export interface CollectorOptions {
+  paths: DataPaths;
+  /** Open databases. The caller owns them: stop() does not close them. */
+  dbs: Pick<OpenedDbs, 'store' | 'storeDb' | 'auth'>;
+  logger: Logger;
+  waClientFactory: (args: WaClientFactoryArgs) => WaClient;
+  /** After caught_up, the collector is live once no message arrived for this long. Default 5 s. */
+  liveQuietMs?: number;
+  /** The collector is live at the latest this long after open. Default 60 s. */
+  liveMaxMs?: number;
+  /** Called on every collector state change. */
+  onState?(s: CollectorState): void;
+}
 
-  fs.mkdirSync(paths.dataDir, { recursive: true });
-  const lock = acquireLock(paths.lockFile);
-  let dbs: OpenedDbs | null = null;
-  let config!: Config;
-  let logger!: Logger;
-  try {
-    const master = keyStore.get();
-    if (!master) throw new Error(NOT_INITIALIZED_MESSAGE);
-    config = loadConfig(paths).config;
-    logger = opts.deps?.logger ?? createLogger({ level: config.logLevel, file: paths.logFile, name: 'wa-bridge-daemon' });
-    dbs = await openDaemonDbs(paths, master);
-    if (!dbs.auth.hasCreds()) throw new Error('not linked: run wa-bridge link');
-  } catch (err) {
-    dbs?.close();
-    lock.release();
-    throw err;
-  }
-  const opened = dbs;
-  const { store, storeDb, auth } = opened;
+export interface CollectorHandle {
+  /** Closes the WhatsApp connection (no logout) and stops the timers. Does not close the DBs. Idempotent. */
+  stop(): Promise<void>;
+  /** Resolves when the collector has stopped (by stop() or by a fatal condition). */
+  done: Promise<{ reason: string }>;
+  state(): CollectorState;
+  /** Subscribes to state changes; returns an unsubscribe function. */
+  onState(listener: (s: CollectorState) => void): () => void;
+}
+
+/**
+ * The embeddable collector: connects, ingests, reconnects with backoff, runs retention.
+ * No lock, no signal handlers, no process.exit. Throws if the config is invalid.
+ */
+export function startCollector(opts: CollectorOptions): CollectorHandle {
+  const { paths, logger, waClientFactory } = opts;
+  const { store, storeDb, auth } = opts.dbs;
+  const liveQuietMs = opts.liveQuietMs ?? 5_000;
+  const liveMaxMs = opts.liveMaxMs ?? 60_000;
+  let config: Config = loadConfig(paths).config;
 
   let stopped = false;
   let attemptActive = false;
@@ -115,6 +126,47 @@ export async function runDaemon(opts: { projectRoot: string; deps?: Partial<Runn
   const backoff = new Backoff();
   let resolveDone: (v: { reason: string }) => void = () => undefined;
   const done = new Promise<{ reason: string }>((r) => { resolveDone = r; });
+  const nowS = (): number => Math.floor(Date.now() / 1000);
+
+  const guarded = (what: string, fn: () => void): void => {
+    try {
+      fn();
+    } catch (err) {
+      logger.error({ what, err: err instanceof Error ? err.message : String(err) }, 'handler failed');
+    }
+  };
+
+  // ---- collector state: connecting -> catching_up -> live ----
+  let state: CollectorState = 'connecting';
+  let caughtUp = false;
+  let quietTimer: ReturnType<typeof setTimeout> | null = null;
+  let maxTimer: ReturnType<typeof setTimeout> | null = null;
+  const listeners = new Set<(s: CollectorState) => void>();
+  if (opts.onState) listeners.add(opts.onState);
+  const clearLiveTimers = (): void => {
+    if (quietTimer) clearTimeout(quietTimer);
+    if (maxTimer) clearTimeout(maxTimer);
+    quietTimer = null;
+    maxTimer = null;
+  };
+  const setState = (s: CollectorState): void => {
+    if (state === s) return;
+    state = s;
+    if (s !== 'catching_up') clearLiveTimers();
+    guarded('collector_state', () => {
+      store.setMeta('collector_state', s);
+      if (s === 'live') store.setMeta('last_live_at', String(nowS()));
+    });
+    for (const l of listeners) {
+      try { l(s); } catch { /* a listener error never breaks ingest */ }
+    }
+  };
+  const goLive = (): void => { if (state === 'catching_up' && !stopped) setState('live'); };
+  const armQuiet = (): void => {
+    if (state !== 'catching_up' || !caughtUp) return;
+    if (quietTimer) clearTimeout(quietTimer);
+    quietTimer = setTimeout(goLive, liveQuietMs);
+  };
 
   const acct = store.getAccount();
   if (acct) currentMe = { id: acct.id, lid: acct.lid };
@@ -128,17 +180,9 @@ export async function runDaemon(opts: { projectRoot: string; deps?: Partial<Runn
   ingestor.recomputeIncluded();
 
   const client = waClientFactory({ auth, logger });
-  const nowS = (): number => Math.floor(Date.now() / 1000);
-
-  const guarded = (what: string, fn: () => void): void => {
-    try {
-      fn();
-    } catch (err) {
-      logger.error({ what, err: err instanceof Error ? err.message : String(err) }, 'handler failed');
-    }
-  };
 
   const touchSync = (): void => {
+    armQuiet();
     const t = Date.now();
     if (t - lastSyncWrite < SYNC_THROTTLE_MS) return;
     lastSyncWrite = t;
@@ -174,13 +218,6 @@ export async function runDaemon(opts: { projectRoot: string; deps?: Partial<Runn
     });
   };
 
-  const signalHandler = (): void => { void stop('signal'); };
-  const installSignals = opts.deps?.installSignalHandlers ?? true;
-  if (installSignals) {
-    process.once('SIGINT', signalHandler);
-    process.once('SIGTERM', signalHandler);
-  }
-
   const clearReconnect = (): void => {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
@@ -208,8 +245,8 @@ export async function runDaemon(opts: { projectRoot: string; deps?: Partial<Runn
     }, delay);
   };
 
-  const fatal = (reason: string): void => {
-    void stop(reason);
+  const fatal = (reason: string, end: CollectorState): void => {
+    void stop(reason, end);
   };
 
   client.on('connection', (s) => {
@@ -217,13 +254,18 @@ export async function runDaemon(opts: { projectRoot: string; deps?: Partial<Runn
     touchSync();
     switch (s.state) {
       case 'connecting':
+        if (state !== 'reconnecting') setState('connecting');
+        return;
+      case 'caught_up':
+        caughtUp = true;
+        armQuiet();
         return;
       case 'qr':
         // Session expired: the daemon never shows a QR. Linking is the CLI's job.
         attemptActive = false;
         guarded('status', () => store.setLinkStatus('logged_out'));
         logger.error('session no longer valid (QR requested): run wa-bridge link');
-        fatal('qr_requested');
+        fatal('qr_requested', 'logged_out');
         return;
       case 'open':
         attemptActive = false;
@@ -238,11 +280,16 @@ export async function runDaemon(opts: { projectRoot: string; deps?: Partial<Runn
           lastConnectedAt: nowS(),
         }));
         logger.info('connected');
+        caughtUp = false;
+        setState('catching_up');
+        clearLiveTimers();
+        maxTimer = setTimeout(goLive, liveMaxMs);
         return;
       case 'close': {
         attemptActive = false;
         guarded('status', () => store.setLinkStatus('disconnected'));
         logger.warn({ reason: s.reason, retry: s.retry }, 'connection closed');
+        if (s.retry || s.reason === 'restart_required') setState('reconnecting');
         if (s.reason === 'restart_required') {
           if (!restartUsed) {
             restartUsed = true;
@@ -263,7 +310,7 @@ export async function runDaemon(opts: { projectRoot: string; deps?: Partial<Runn
         } else {
           logger.error({ reason: s.reason }, 'connection closed permanently, stopping');
         }
-        fatal(s.reason);
+        fatal(s.reason, s.reason === 'logged_out' ? 'logged_out' : 'stopped');
       }
     }
   });
@@ -279,30 +326,83 @@ export async function runDaemon(opts: { projectRoot: string; deps?: Partial<Runn
   const configTimer = setInterval(checkConfig, CONFIG_POLL_MS);
 
   let stopPromise: Promise<void> | null = null;
-  function stop(reason = 'stop'): Promise<void> {
+  function stop(reason = 'stop', end: CollectorState = 'stopped'): Promise<void> {
     if (stopPromise) return stopPromise;
     stopped = true;
     stopPromise = (async () => {
       clearReconnect();
       clearInterval(retentionTimer);
       clearInterval(configTimer);
-      if (installSignals) {
-        process.removeListener('SIGINT', signalHandler);
-        process.removeListener('SIGTERM', signalHandler);
-      }
+      clearLiveTimers();
       try {
         await client.close();
       } catch (err) {
         logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'client close failed');
       }
-      opened.close();
-      lock.release();
-      logger.info({ reason }, 'daemon stopped');
+      setState(end);
       resolveDone({ reason });
     })();
     return stopPromise;
   }
 
   connect();
-  return { stop: () => stop('stop'), done };
+  return {
+    stop: () => stop('stop'),
+    done,
+    state: () => state,
+    onState(listener) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+  };
+}
+
+export async function runDaemon(opts: { projectRoot: string; deps?: Partial<RunnerDeps> }): Promise<DaemonHandle> {
+  const paths = resolvePaths(opts.projectRoot);
+  const keyStore = (opts.deps?.keyStore ?? createMasterKeyStore)(paths.projectRoot);
+  const waClientFactory = opts.deps?.waClientFactory ?? ((a: WaClientFactoryArgs) => createWaClient({ auth: a.auth, logger: a.logger }));
+
+  fs.mkdirSync(paths.dataDir, { recursive: true });
+  const lock = acquireLock(paths.lockFile);
+  let dbs: OpenedDbs | null = null;
+  let logger!: Logger;
+  let collector!: CollectorHandle;
+  try {
+    const master = keyStore.get();
+    if (!master) throw new Error(NOT_INITIALIZED_MESSAGE);
+    const config = loadConfig(paths).config;
+    logger = opts.deps?.logger ?? createLogger({ level: config.logLevel, file: paths.logFile, name: 'wa-bridge-daemon' });
+    dbs = await openDaemonDbs(paths, master);
+    if (!dbs.auth.hasCreds()) throw new Error('not linked: run wa-bridge link');
+    collector = startCollector({ paths, dbs, logger, waClientFactory });
+  } catch (err) {
+    dbs?.close();
+    lock.release();
+    throw err;
+  }
+  const opened = dbs;
+
+  const signalHandler = (): void => { void collector.stop(); };
+  const installSignals = opts.deps?.installSignalHandlers ?? true;
+  if (installSignals) {
+    process.once('SIGINT', signalHandler);
+    process.once('SIGTERM', signalHandler);
+  }
+  const done = collector.done.then((r) => {
+    if (installSignals) {
+      process.removeListener('SIGINT', signalHandler);
+      process.removeListener('SIGTERM', signalHandler);
+    }
+    opened.close();
+    lock.release();
+    logger.info({ reason: r.reason }, 'daemon stopped');
+    return r;
+  });
+  return {
+    stop: async () => {
+      await collector.stop();
+      await done;
+    },
+    done,
+  };
 }

@@ -2,10 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DATA_DIR_NAME } from '../../core/constants.js';
 import { resolvePaths } from '../../core/paths.js';
-import { writeDefaultConfigs } from '../../config/index.js';
-import { deriveDbKey, openEncryptedDb } from '../../crypto/index.js';
-import { useDbAuthState } from '../../daemon/wa/index.js';
-import { SqliteStore } from '../../store/index.js';
+import { initDataFiles } from '../../host/init.js';
 import type { CliDeps } from '../deps.js';
 import { CliError, type Io } from '../io.js';
 import { ACCEPT_PHRASE, RISK_WARNING } from '../warning.js';
@@ -59,26 +56,7 @@ export async function initCommand(opts: InitOpts, io: Io, deps: CliDeps): Promis
     if (answer.trim() !== ACCEPT_PHRASE) throw new CliError('Aborted: the risks were not accepted.');
   }
 
-  fs.mkdirSync(paths.dataDir, { recursive: true });
-  const master = keyStore.get() ?? keyStore.create();
-
-  const storeDb = openEncryptedDb(paths.storeDb, deriveDbKey(master, 'store'));
-  try {
-    const store = new SqliteStore(storeDb);
-    store.migrate();
-    store.setMeta('risk_accepted_at', String(Math.floor(deps.now() / 1000)));
-  } finally {
-    storeDb.close();
-  }
-
-  const authDb = openEncryptedDb(paths.authDb, deriveDbKey(master, 'auth'));
-  try {
-    await useDbAuthState(authDb); // creates the auth table
-  } finally {
-    authDb.close();
-  }
-
-  writeDefaultConfigs(paths);
+  await initDataFiles(paths, keyStore, { riskAcceptedAtMs: deps.now() });
   const changed = ensureGitignore(paths.projectRoot);
 
   io.out(`Initialised ${paths.dataDir}`);
