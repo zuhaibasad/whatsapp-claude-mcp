@@ -3,27 +3,40 @@
 import type { ChatRow } from '../src/core/contracts.js';
 import type { SelectionSummary, SetupState, SetupStep } from '../src/core/service.js';
 import type { Host } from './host.js';
+import { screenFromSearch } from './logic.js';
 
 const URDU = ['خاندان کا گروپ', 'دفتر کے دوست', 'امی جان', 'کرکٹ کلب لاہور', 'محلے کی کمیٹی', 'احمد بھائی'];
 const LATIN = ['Family', 'Work team', 'Football 5-a-side', 'Book club', 'Neighbours', 'Trip to Hunza', 'Class of 2012', 'Cousins'];
 const EMOJI = ['🎉', '🏏', '🍕', '🌙', '💼', '📚'];
 
+const CHANNELS = ['Dawn News', 'Cricket Updates', 'BBC News', 'Recipes by Sana', 'خبریں'];
+
 function makeRows(n: number): ChatRow[] {
   const now = Math.floor(Date.now() / 1000);
   const rows: ChatRow[] = [];
   for (let i = 0; i < n; i++) {
-    const group = i % 6 === 0;
-    const pick = i % 3;
+    const kind = i % 6 === 0 ? 'group' : i % 23 === 5 ? 'channel' : 'direct';
+    const pick = kind === 'group' ? i % 2 : i % 3;
+    const lid = kind === 'direct' && i % 5 === 1; // linked-device id: only a phone, no saved name
     let name: string | null;
-    if (pick === 0) name = `${LATIN[i % LATIN.length]} ${EMOJI[i % EMOJI.length]} ${i}`;
+    if (kind === 'channel') name = CHANNELS[i % CHANNELS.length] ?? 'Channel';
+    else if (lid) name = null;
+    else if (pick === 0) name = `${LATIN[i % LATIN.length]} ${EMOJI[i % EMOJI.length]} ${i}`;
     else if (pick === 1) name = `${URDU[i % URDU.length]} ${i}`;
     else name = i % 7 === 0 ? null : `Contact ${i} ${EMOJI[(i + 2) % EMOJI.length]}`;
+    const phone = kind === 'direct' ? `+92300${String(1000000 + i)}` : null;
+    // Interleave recency: groups and direct chats mixed, not clustered by type.
+    const age = ((i * 37) % n) * 2700;
+    const id = kind === 'group' ? `1203630${i}@g.us`
+      : kind === 'channel' ? `1203631${i}@newsletter`
+        : lid ? `27${String(1000000 + i)}@lid`
+          : `92300${String(1000000 + i)}@s.whatsapp.net`;
     rows.push({
-      id: group ? `1203630${i}@g.us` : `92300${String(1000000 + i)}@s.whatsapp.net`,
-      name, type: group ? 'group' : 'direct', phone: group ? null : `+92300${String(1000000 + i)}`, unreadCount: i % 4 === 0 ? i % 9 : 0,
-      participantCount: group ? 3 + (i % 40) : null,
-      lastMessageAt: i % 50 === 49 ? null : now - i * 5400,
-      preselected: group && i % 12 === 0,
+      id,
+      name, type: kind, phone, unreadCount: i % 4 === 0 ? (i * 7) % 130 : i % 11 === 0 ? null : 0,
+      participantCount: kind === 'group' ? 3 + (i % 40) : null,
+      lastMessageAt: i % 50 === 49 ? null : now - age,
+      preselected: kind === 'group' && i % 12 === 0,
     });
   }
   return rows;
@@ -82,8 +95,11 @@ export function createMockHost(): Host {
   document.body.append(bar);
 
   const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+  const asApp = new URLSearchParams(location.search).get('host') === 'app'; // ?host=app shows the Desktop wording
   return {
+    kind: asApp ? 'app' : 'browser',
     async init() { await wait(150); },
+    async initialScreen() { return screenFromSearch(location.search); },
     async call(op, ...args) {
       await wait(120);
       switch (op) {
@@ -96,9 +112,10 @@ export function createMockHost(): Host {
           go('done');
           if (!selected) return null as never;
           const g = rows.filter((r) => r.type === 'group');
+          const nonChannel = rows.filter((r) => r.type !== 'channel');
           const sum: SelectionSummary = {
             groupsSelected: g.filter((r) => selected?.includes(r.id)).length, groupsTotal: g.length,
-            directSelected: selected.filter((id) => id.endsWith('@s.whatsapp.net')).length, directTotal: rows.length - g.length,
+            directSelected: selected.filter((id) => !id.endsWith('@g.us') && !id.endsWith('@newsletter')).length, directTotal: nonChannel.length - g.length,
             includeGroupsByDefault: false, includeDirectByDefault: false,
           };
           return sum as never;

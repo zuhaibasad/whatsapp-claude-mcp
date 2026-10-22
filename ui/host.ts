@@ -1,12 +1,16 @@
 // Two hosts, one UI: Claude Desktop MCP App panel (postMessage) or plain browser page (fetch).
 import { App } from '@modelcontextprotocol/ext-apps/app-with-deps';
 import type { SetupOps, SetupState } from '../src/core/service.js';
-import { unwrap, type UiOpName } from './logic.js';
+import { initialScreenFrom, screenFromSearch, unwrap, type InitialScreen, type UiOpName } from './logic.js';
 
 type UiOps = Pick<SetupOps, UiOpName>;
 
 export interface Host {
+  /** 'app' = Claude Desktop panel, 'browser' = plain page (picks the permission tip wording). */
+  kind: 'app' | 'browser';
   init(): Promise<void>;
+  /** Where the opener wants to land: first tool result (panel) or `?screen=` (browser). */
+  initialScreen(): Promise<InitialScreen | null>;
   call<K extends UiOpName>(op: K, ...args: Parameters<UiOps[K]>): Promise<Awaited<ReturnType<UiOps[K]>>>;
   acceptRisk(): Promise<SetupState>;
   notifyDone?(summary: string): Promise<void>;
@@ -49,7 +53,9 @@ export function httpHost(): Host {
     return data;
   }
   return {
+    kind: 'browser',
     async init() { /* nothing to set up */ },
+    async initialScreen() { return screenFromSearch(location.search); },
     async call(op, ...args) {
       return unwrap(op, await post(WIRE_NAME[op], argsFor(op, args))) as never;
     },
@@ -59,6 +65,9 @@ export function httpHost(): Host {
 
 export function mcpAppHost(): Host {
   let app: App | null = null;
+  let initial: InitialScreen | null = null;
+  let gotResult: () => void = () => {};
+  const firstResult = new Promise<void>((r) => { gotResult = r; });
   async function tool(name: string, args: Record<string, unknown>): Promise<unknown> {
     if (!app) throw failure('Not connected to Claude yet.');
     const res = await app.callServerTool({ name: `setup_${name}`, arguments: args });
@@ -68,9 +77,19 @@ export function mcpAppHost(): Host {
     try { return JSON.parse(text); } catch { throw failure(text); }
   }
   return {
+    kind: 'app',
     async init() {
       app = new App({ name: 'wa-bridge-setup', version: '0.1.0' });
+      app.ontoolresult = (params) => {
+        initial ??= initialScreenFrom(params.structuredContent);
+        gotResult();
+      };
       await app.connect();
+    },
+    async initialScreen() {
+      // The opening tool result normally arrives right after connect; do not wait long if it does not.
+      await Promise.race([firstResult, new Promise<void>((r) => setTimeout(r, 800))]);
+      return initial;
     },
     async call(op, ...args) {
       return unwrap(op, await tool(WIRE_NAME[op], argsFor(op, args))) as never;

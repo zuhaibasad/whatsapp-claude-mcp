@@ -4,9 +4,10 @@ import { pickHost, type Host } from './host.js';
 import { createMockHost } from './dev-mock.js';
 import { safeSvg } from './svg.js';
 import {
-  accountLabel, applyToVisible, displayName, doneSummaryLine, filterRows, initialSelection, relativeTime,
-  screenFor, selectionCounts, selectionHeader, shouldPoll, tabCounts, visibleRange,
-  type Screen, type SelectionCounts, type Tab,
+  accountLabel, applyToVisible, channelCounts, displayName, doneSummaryLine, filterRows, initialSelection, opensPicker,
+  relativeTime, screenFor, selectionCounts, selectionHeader, shouldPoll, showPermissionsStep, subPhone, tabCounts,
+  unreadLabel, visibleRange,
+  type Screen, type SelectionCounts, type SortMode, type Tab,
 } from './logic.js';
 
 type Child = Node | string | null | undefined;
@@ -32,6 +33,11 @@ let state: SetupState | null = null;
 let stateAt = 0;
 let editing = false;
 let doneLocal = false;
+let entryChats = false;          // opened straight to the picker ("Add a chat")
+let closeVariant = false;        // last save came from a later visit, not first-time setup
+let permissionsPending = false;
+let permissionsSeen = false;
+const mockMode = new URLSearchParams(location.search).get('mock') === '1';
 let fatal: string | null = null;
 let lastCounts: SelectionCounts | null = null;
 let lastSummary: SelectionSummary | null = null;
@@ -47,6 +53,7 @@ const root = (): HTMLElement => document.getElementById('app') as HTMLElement;
 function currentScreen(): Screen {
   if (fatal) return 'error';
   if (!state) return 'syncing';
+  if (permissionsPending) return 'permissions';
   if (doneLocal && (state.step === 'done' || state.step === 'choose_chats')) return 'done';
   return screenFor(state.step, editing);
 }
@@ -187,7 +194,35 @@ const renderers: Record<Screen, () => void> = {
 
   picker() { void renderPicker(); },
 
+  permissions() {
+    const finish = (): void => { permissionsPending = false; permissionsSeen = true; closeVariant = entryChats; shown = null; route(); };
+    const tip = host.kind === 'app'
+      ? h('p', { class: 'lead' }, 'Claude asks before using each WhatsApp tool for the first time. To stop that: open ',
+        h('strong', {}, 'Settings → Extensions → WhatsApp Bridge'), ' and set the tools to ', h('strong', {}, 'Always allow'), '.')
+      : h('p', { class: 'lead' }, 'When Claude asks to use a wa-bridge tool, choose ', h('em', {}, 'Yes, and don\'t ask again'), '.');
+    show(
+      h('div', { class: 'tick', 'aria-hidden': 'true' }, '🔔'),
+      h('h1', {}, 'One last thing: stop the permission pop-ups'),
+      tip,
+      h('p', { class: 'muted' }, 'wa-bridge can only read; it never sends anything.'),
+      h('div', { class: 'actions split' }, button('Skip', finish, 'link'), button('Got it', finish)),
+    );
+  },
+
   done() {
+    if (closeVariant) {
+      show(
+        h('div', { class: 'tick', 'aria-hidden': 'true' }, '✓'),
+        h('h1', {}, 'Saved'),
+        h('p', { class: 'lead' }, doneSummaryLine(lastCounts)),
+        h('p', { class: 'lead' }, 'Done — you can close this panel.'),
+        h('p', { class: 'muted' }, 'If you turn on a chat later, Claude will only see messages from that point on.'),
+        h('div', { class: 'actions' }, button('Change chats', () => {
+          editing = true; doneLocal = false; shown = null; route();
+        }, 'link')),
+      );
+      return;
+    }
     const lines: Child[] = [h('p', { class: 'lead' }, doneSummaryLine(lastCounts))];
     if (lastSummary) {
       lines.push(h('ul', { class: 'points compact' },
@@ -250,14 +285,21 @@ const updaters: Partial<Record<Screen, () => void>> = {
 
 // ---------- chat picker ----------
 
-interface Picker { rows: ChatRow[]; selected: Set<string>; tab: Tab; query: string }
+interface Picker { rows: ChatRow[]; selected: Set<string>; tab: Tab; query: string; sort: SortMode }
 let picker: Picker | null = null;
 
 async function renderPicker(): Promise<void> {
   show(h('div', { class: 'center' }, spinner()), h('p', { class: 'lead center' }, 'Loading your chats…'));
   try {
     const rows = await host.call('chatRows');
-    picker = { rows, selected: initialSelection(rows), tab: 'all', query: '' };
+    picker = { rows, selected: initialSelection(rows), tab: 'all', query: '', sort: 'recent' };
+    if (mockMode) { // dev aid for screenshots: ?mock=1&tab=channels&q=0300&sort=unread
+      const q = new URLSearchParams(location.search);
+      const t = q.get('tab');
+      if (t === 'groups' || t === 'direct' || t === 'channels') picker.tab = t;
+      picker.query = q.get('q') ?? '';
+      if (q.get('sort') === 'unread') picker.sort = 'unread';
+    }
   } catch (e) { fatal = messageOf(e); shown = null; route(); return; }
   buildPicker(picker);
 }
@@ -274,13 +316,13 @@ function buildPicker(p: Picker): void {
 
   const drawTabs = (): void => {
     const counts = tabCounts(p.rows);
-    const defs: [Tab, string][] = [['all', 'All'], ['groups', 'Groups'], ['direct', 'Direct']];
+    const defs: [Tab, string][] = [['all', 'All'], ['groups', 'Groups'], ['direct', 'Direct'], ['channels', 'Channels']];
     tabsEl.replaceChildren(...defs.map(([t, label]) => h('button', {
       type: 'button', role: 'tab', class: `tab${p.tab === t ? ' on' : ''}`, 'aria-selected': String(p.tab === t),
       onclick: () => { p.tab = t; list.scrollTop = 0; refilter(); },
     }, `${label} `, h('span', { class: 'count' }, String(counts[t])))));
   };
-  const drawHeader = (): void => { header.textContent = selectionHeader(selectionCounts(p.rows, p.selected)); };
+  const drawHeader = (): void => { header.textContent = selectionHeader(selectionCounts(p.rows, p.selected), channelCounts(p.rows, p.selected)); };
 
   const drawRows = (force = false): void => {
     const vh = list.clientHeight || 360;
@@ -299,19 +341,22 @@ function buildPicker(p: Picker): void {
         drawHeader();
       });
       const members = r.type === 'group' && r.participantCount != null ? `${r.participantCount} members · ` : '';
+      const phone = subPhone(r);
+      const badge = unreadLabel(r.unreadCount);
       nodes.push(h('label', { class: 'row', style: `top:${i * ROW_H}px;height:${ROW_H}px` },
         cb,
-        h('span', { class: 'icon', 'aria-hidden': 'true' }, r.type === 'group' ? '👥' : '👤'),
+        h('span', { class: 'icon', 'aria-hidden': 'true' }, r.type === 'group' ? '👥' : r.type === 'channel' ? '📢' : '👤'),
         h('span', { class: 'meta' },
           h('span', { class: 'name', dir: 'auto' }, displayName(r)),
-          h('span', { class: 'sub' }, members + relativeTime(r.lastMessageAt, now))),
+          h('span', { class: 'sub' }, members + (phone ? `${phone} · ` : '') + relativeTime(r.lastMessageAt, now))),
+        badge ? h('span', { class: 'badge', 'aria-label': `${r.unreadCount} unread` }, badge) : null,
       ));
     }
     spacer.replaceChildren(...nodes);
   };
 
   const refilter = (): void => {
-    visible = filterRows(p.rows, p.tab, p.query);
+    visible = filterRows(p.rows, p.tab, p.query, p.sort);
     spacer.style.height = `${visible.length * ROW_H}px`;
     empty.hidden = visible.length > 0;
     drawTabs();
@@ -324,8 +369,17 @@ function buildPicker(p: Picker): void {
     raf = requestAnimationFrame(() => { raf = 0; drawRows(); });
   });
 
-  const search = h('input', { type: 'search', class: 'search', placeholder: 'Search by name', 'aria-label': 'Search chats', dir: 'auto' });
+  const search = h('input', { type: 'search', class: 'search', placeholder: 'Search name or number', 'aria-label': 'Search chats', dir: 'auto' });
   search.addEventListener('input', () => { p.query = search.value; list.scrollTop = 0; refilter(); });
+
+  const sortBtns = h('span', { class: 'sort-btns' });
+  const drawSort = (): void => {
+    const defs: [SortMode, string][] = [['recent', 'Recent'], ['unread', 'Unread first']];
+    sortBtns.replaceChildren(...defs.map(([m, label]) => h('button', {
+      type: 'button', class: `seg${p.sort === m ? ' on' : ''}`, 'aria-pressed': String(p.sort === m),
+      onclick: () => { p.sort = m; list.scrollTop = 0; drawSort(); refilter(); },
+    }, label)));
+  };
 
   const bulk = (on: boolean) => (): void => {
     p.selected = applyToVisible(p.selected, visible, on);
@@ -340,6 +394,7 @@ function buildPicker(p: Picker): void {
     h('p', { class: 'lead' }, 'Pick the chats Claude is allowed to read. You can change this later.'),
     tabsEl,
     search,
+    h('div', { class: 'sortbar' }, h('span', { class: 'muted' }, 'Sort by'), sortBtns),
     h('div', { class: 'bulk' },
       header,
       h('span', { class: 'bulk-btns' },
@@ -351,16 +406,22 @@ function buildPicker(p: Picker): void {
   );
   // `show` replaced the DOM, so attach list-dependent drawing after insertion.
   drawHeader();
+  drawSort();
+  if (p.query) search.value = p.query;
   refilter();
+  if (mockMode && new URLSearchParams(location.search).get('autosave') === '1') save.click();
 }
 
 async function submit(p: Picker, ids: Set<string> | null, saveBtn: HTMLButtonElement): Promise<void> {
   saveBtn.disabled = true;
   await run(async () => {
+    const stepBefore = state?.step ?? null;
     const summary = await host.call('submitSelection', ids ? [...ids] : null);
     lastSummary = summary;
     lastCounts = summary ? summary : ids ? selectionCounts(p.rows, ids) : null;
     editing = false; doneLocal = true; shown = null;
+    permissionsPending = showPermissionsStep(stepBefore, permissionsSeen);
+    closeVariant = !permissionsPending && (entryChats || stepBefore === 'done');
     const c = lastCounts;
     void host.notifyDone?.(c
       ? `User saved chat selection: ${c.groupsSelected} groups, ${c.directSelected} direct chats.`
@@ -373,8 +434,7 @@ async function submit(p: Picker, ids: Set<string> | null, saveBtn: HTMLButtonEle
 // ---------- boot ----------
 
 async function boot(): Promise<void> {
-  const mock = new URLSearchParams(location.search).get('mock') === '1';
-  host = mock ? createMockHost() : pickHost();
+  host = mockMode ? createMockHost() : pickHost();
   show(h('div', { class: 'center' }, spinner()), h('p', { class: 'lead center' }, 'Loading…'));
   try {
     await host.init();
@@ -386,7 +446,11 @@ async function boot(): Promise<void> {
     if (document.visibilityState === 'visible' && state && shouldPoll(state.step)) void refresh(); else schedulePoll();
   });
   await refresh();
-  if (!state) route();
+  if (state) {
+    let initial = null;
+    try { initial = await host.initialScreen(); } catch { /* optional */ }
+    if (opensPicker(initial, state.step)) { entryChats = true; editing = true; shown = null; route(); }
+  } else route();
 }
 
 void boot();

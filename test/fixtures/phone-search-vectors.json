@@ -1,0 +1,24 @@
+{
+  "_comment": "Shared by test/ui (ui/logic.ts matchesQuery) and the server (T15 matchesQuery). Rule: match name text (case-insensitive), or phone digits ignoring spaces, + - and brackets; a leading 0 in the query means 92. Digit matching only applies when the query is only digits and separators.",
+  "vectors": [
+    { "query": "ali", "name": "Ali Khan", "phone": "+923001234567", "match": true },
+    { "query": "ALI", "name": "Ali Khan", "phone": null, "match": true },
+    { "query": "zed", "name": "Ali Khan", "phone": "+923001234567", "match": false },
+    { "query": "خاندان", "name": "خاندان کا گروپ", "phone": null, "match": true },
+    { "query": "🎉", "name": "Party 🎉", "phone": null, "match": true },
+    { "query": "923001234567", "name": null, "phone": "+923001234567", "match": true },
+    { "query": "+92 300 1234567", "name": null, "phone": "+923001234567", "match": true },
+    { "query": "+92-300-1234567", "name": "Ali", "phone": "+923001234567", "match": true },
+    { "query": "0300 1234567", "name": null, "phone": "+923001234567", "match": true },
+    { "query": "03001234567", "name": null, "phone": "+923001234567", "match": true },
+    { "query": "0300", "name": null, "phone": "+923001234567", "match": true },
+    { "query": "1234567", "name": null, "phone": "+923001234567", "match": true },
+    { "query": "0301", "name": null, "phone": "+923001234567", "match": false },
+    { "query": "03001234568", "name": null, "phone": "+923001234567", "match": false },
+    { "query": "300", "name": "Room 101", "phone": null, "match": false },
+    { "query": "101", "name": "Room 101", "phone": null, "match": true },
+    { "query": "0300", "name": "Ali", "phone": null, "match": false },
+    { "query": "   ", "name": "Anyone", "phone": null, "match": true },
+    { "query": "+44 7700 900123", "name": null, "phone": "+447700900123", "match": true }
+  ]
+}

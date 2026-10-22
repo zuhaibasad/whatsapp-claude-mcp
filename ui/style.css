@@ -67,7 +67,7 @@ p { margin: 0 0 14px; }
 .qr svg { width: 100%; height: 100%; display: block; }
 .tick { width: 56px; height: 56px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 30px; display: grid; place-items: center; margin-bottom: 14px; }
 
-.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 .tab { font: inherit; background: none; border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
 .tab.on { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
 .tab .count { color: var(--muted); font-size: 0.85em; }
@@ -83,9 +83,15 @@ p { margin: 0 0 14px; }
 .row:hover { background: var(--accent-soft); }
 .row input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 .icon { font-size: 1.4rem; flex: none; }
-.meta { display: flex; flex-direction: column; min-width: 0; }
-.name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.name { align-self: flex-start; max-width: 100%; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub { color: var(--muted); font-size: 0.85rem; }
+.badge { flex: none; margin-inline-start: auto; min-width: 24px; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: var(--accent-text); font-size: 0.8rem; font-weight: 700; text-align: center; line-height: 1.4; }
+.sortbar { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.sort-btns { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg { font: inherit; font-size: 0.85rem; background: none; border: 0; color: var(--text); padding: 4px 12px; cursor: pointer; }
+.seg.on { background: var(--accent-soft); font-weight: 600; color: var(--accent); }
+.seg:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; }
 .empty { position: absolute; inset: 40% 0 auto; }
 
 .devbar { position: fixed; bottom: 8px; right: 8px; background: #222; color: #fff; padding: 6px 8px; border-radius: 8px; font-size: 12px; opacity: 0.85; }
