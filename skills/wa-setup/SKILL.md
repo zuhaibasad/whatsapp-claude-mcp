@@ -13,7 +13,7 @@ description: Guided first-time install of chatai: Node check, init, linking What
 - Say when something is uncertain (`unsure: ...`); cite refs when later showing messages.
 
 ## Steps (confirm each before moving on)
-1. **Node.** Run `node --version`. Need >= 22.12. If lower, ask the user to upgrade and stop.
+1. **Node.** Run `node --version`. Need >= 24. If lower, ask the user to upgrade and stop.
 2. **Init.** Ask the user to run `npx chatai init` in the project folder in their own terminal; it shows a risk warning and needs `I accept` typed by them. Afterwards summarise the warning in 3 lines (unofficial client, read-only, local encrypted store) and confirm `.chatai/` exists.
 3. **Link.** Ask the user to run `chatai link` and scan the QR shown in the terminal (or `.chatai/qr.png`) via WhatsApp > Linked devices > Link a device. Wait for confirmation.
 4. **Daemon.** Run, or ask the user to run, `chatai daemon start --detach`. When `chatai daemon install` is available (Phase 3), offer it so collection survives reboots.

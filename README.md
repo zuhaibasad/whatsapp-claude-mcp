@@ -10,7 +10,7 @@ Daily WhatsApp brief, mentions, follow-ups, bills and payment screenshots. Roman
 [![CI](https://github.com/zuhaibasad/whatsapp-claude-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/zuhaibasad/whatsapp-claude-mcp/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/zuhaibasad/whatsapp-claude-mcp?include_prereleases&label=release)](https://github.com/zuhaibasad/whatsapp-claude-mcp/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-![Platform](https://img.shields.io/badge/platform-Windows-0078D4)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS-0078D4)
 ![Claude Desktop](https://img.shields.io/badge/Claude-Desktop%20%2B%20Code-D97757)
 ![MCP](https://img.shields.io/badge/MCP-server-8A63D2)
 ![Read-only](https://img.shields.io/badge/WhatsApp-read--only-brightgreen)
@@ -40,7 +40,7 @@ Most WhatsApp MCP servers give an AI full control of your account. ChatAI is bui
 |---|---|---|
 | Sending, reactions, read receipts | Never. Blocked by tests in the build | Usually available to the AI |
 | Install | One `.mcpb` file, setup inside the chat | Clone, Go/Python toolchains, JSON config |
-| Storage | Encrypted, key in Windows Credential Manager | Often a plain SQLite file |
+| Storage | Encrypted, key in the OS keychain | Often a plain SQLite file |
 | Which chats | Only the ones you pick | Usually everything |
 | Bills and screenshots | Read on your PC (local OCR), sent to Claude as text | Image sent to the AI, or not supported |
 
@@ -73,13 +73,13 @@ Setup runs inside the Claude chat (or in your browser for Claude Code). Four ste
 
 <sub>Screenshots use mock data.</sub>
 
-## Install in 2 minutes (Claude Desktop, Windows)
+## Install in 2 minutes (Claude Desktop, Windows or macOS)
 
-1. Get `chatai-<version>.mcpb` from the [Releases](../../releases) page. No release yet? Build it: `npm ci` then `npm run build:mcpb` (the file appears in `build/`).
+1. Get the file for your computer from the [Releases](../../releases) page: `chatai-<version>-windows.mcpb` (Windows x64) or `chatai-<version>-macos.mcpb` (Apple Silicon and Intel Macs). No release yet? Build it: `npm ci` then `npm run build:mcpb` (the file appears in `build/`).
 2. Claude Desktop: **Settings, Extensions, Advanced settings, Install Extension**. Pick the file. Enable **ChatAI for WhatsApp**.
 3. In a chat, say **"Set up WhatsApp"** and follow the four steps above.
 
-Tools missing? Quit Claude Desktop fully and open it again. You need Windows, your own phone with WhatsApp, and a Claude account.
+Tools missing? Quit Claude Desktop fully and open it again. You need Windows 10/11 (x64) or macOS, your own phone with WhatsApp, and a Claude account.
 
 <details>
 <summary><b>Claude Code (from source)</b></summary>
@@ -92,13 +92,13 @@ npm run build
 claude mcp add --transport stdio --scope user chatai -- "$((Get-Command node).Source)" "$((Resolve-Path dist/mcp/main.js).Path)"
 ```
 
-Needs Node.js 22.12 or newer. In Claude Code run `/mcp` to check, then say "Set up WhatsApp". Setup opens in your browser. Optional skills for briefs, mentions, reports and export are in [`skills/`](skills/README.md).
+Needs Node.js 24 or newer (on Node 22 the encrypted database module must be compiled, which needs Visual Studio build tools). In Claude Code run `/mcp` to check, then say "Set up WhatsApp". Setup opens in your browser. Optional skills for briefs, mentions, reports and export are in [`skills/`](skills/README.md).
 </details>
 
 ## Updating and uninstalling
 
 - **Update:** install the new `.mcpb` the same way. Your link and data stay. The database is backed up before any upgrade.
-- **Uninstall:** in Claude Desktop, **Settings, Extensions**, remove **ChatAI for WhatsApp**. On your phone, **WhatsApp, Linked devices**, remove the device (it shows as a Windows desktop). Delete `%USERPROFILE%\.chatai`. The encryption key is in Windows Credential Manager (entries ending in `.chatai`), so remove it there too.
+- **Uninstall:** in Claude Desktop, **Settings, Extensions**, remove **ChatAI for WhatsApp**. On your phone, **WhatsApp, Linked devices**, remove the device (it shows as a Windows or Mac desktop). Delete the data folder (see [Settings](#settings)). The encryption key is in Windows Credential Manager (entries ending in `.chatai`) or macOS Keychain Access (entries named `chatai`); remove it there too.
 
 ## Things to ask Claude
 
@@ -117,7 +117,7 @@ Needs Node.js 22.12 or newer. In Claude Code run `/mcp` to check, then say "Set 
 ```mermaid
 flowchart LR
     WA([WhatsApp]) <-->|linked device, read-only| C
-    subgraph PC[Your Windows PC]
+    subgraph PC[Your computer]
         direction LR
         subgraph M[ChatAI MCP server]
             C[Collector] --> T[7 MCP tools]
@@ -134,7 +134,7 @@ The collector lives inside the MCP server, so it runs only while Claude is open.
 
 ## Settings
 
-Edit `%USERPROFILE%\.chatai\config.yaml`. Changes apply within a minute; no restart needed. Usually you only touch chat selection, and Claude does that for you ("stop reading the Family group").
+Edit `config.yaml` in the data folder: `%USERPROFILE%\.chatai` on Windows, `~/Library/Application Support/chatai` on macOS. Changes apply within a minute; no restart needed. Usually you only touch chat selection, and Claude does that for you ("stop reading the Family group").
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -153,8 +153,8 @@ Per-chat notes ("the ERP group is for supplier invoices") live in `departments.y
 
 ## Private by design
 
-- 🏠 **Local only.** Messages are stored in `%USERPROFILE%\.chatai`. The setup page listens on `127.0.0.1` only.
-- 🔐 **Encrypted.** The message database and the WhatsApp session are encrypted. The key is in Windows Credential Manager, never in a file.
+- 🏠 **Local only.** Messages are stored in `%USERPROFILE%\.chatai` (Windows) or `~/Library/Application Support/chatai` (macOS). The setup page listens on `127.0.0.1` only.
+- 🔐 **Encrypted.** The message database and the WhatsApp session are encrypted. The key is in the OS keychain (Windows Credential Manager or macOS Keychain), never in a file.
 - 👀 **Read-only.** No sending, no blue ticks, no "online" status. Code checks in the test suite block write APIs.
 - ✅ **You choose the chats.** Excluded chats are not stored. Direct chats and channels start off. Messages expire after 30 days by default.
 - 🧱 **Untrusted content.** Setup secrets (QR, tokens) never enter Claude's tool results. Every result that carries chat text or image text is marked as data from other people, and Claude is told never to follow instructions found in it.
@@ -171,7 +171,7 @@ Per-chat notes ("the ERP group is for supplier invoices") live in `departments.y
 
 | Problem | Fix |
 |---|---|
-| The WhatsApp tools are missing in Claude | Quit Claude Desktop fully (also from the tray) and open it again |
+| The WhatsApp tools are missing in Claude | Quit Claude Desktop fully (Windows: also from the tray; macOS: Cmd+Q) and open it again |
 | "WhatsApp logged this device out" | Say "set up WhatsApp" and scan the QR code again |
 | "The collector is not running" or old data | It runs only while Claude is open. Keep Claude open; it catches up on start |
 | An image shows `expired` | WhatsApp no longer has the file (old image). ChatAI never asks your phone to re-send it |
@@ -185,7 +185,7 @@ Per-chat notes ("the ERP group is for supplier invoices") live in `departments.y
 </details>
 
 <details><summary>Where is my data stored?</summary>
-<br>On your PC in <code>%USERPROFILE%\.chatai</code>: <code>store.db</code> and <code>auth.db</code> (encrypted), plus plain config files and exports. Exports and YAML files are not encrypted, so protect them.
+<br>On your computer, in <code>%USERPROFILE%\.chatai</code> (Windows) or <code>~/Library/Application Support/chatai</code> (macOS): <code>store.db</code> and <code>auth.db</code> (encrypted), plus plain config files and exports. Exports and YAML files are not encrypted, so protect them.
 </details>
 
 <details><summary>What if Claude is closed?</summary>
@@ -201,7 +201,7 @@ Per-chat notes ("the ERP group is for supplier invoices") live in `departments.y
 </details>
 
 <details><summary>How do I disconnect?</summary>
-<br>On your phone: WhatsApp, Linked devices, remove the device ChatAI linked (it shows as a Windows desktop). Delete <code>%USERPROFILE%\.chatai</code> to remove local data. This does not recall text already sent to Claude.
+<br>On your phone: WhatsApp, Linked devices, remove the device ChatAI linked (it shows as a Windows or Mac desktop). Delete the data folder to remove local data. This does not recall text already sent to Claude.
 </details>
 
 ## Roadmap

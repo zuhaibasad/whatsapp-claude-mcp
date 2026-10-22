@@ -169,7 +169,7 @@ const OWN_RECORDS_NOTE = 'Changes only ChatAI\'s own records, never WhatsApp.';
 export function createServer(deps: McpDeps, options: ServerOptions = {}): CreatedServer {
   const paths = deps.paths ?? resolvePaths(deps.projectRoot);
   const server = new McpServer(
-    { name: 'chatai', version: '0.3.0' },
+    { name: 'chatai', version: '0.4.0' },
     { capabilities: { tools: { listChanged: true }, resources: {}, prompts: {} }, instructions: SERVER_INSTRUCTIONS },
   );
   const handlers = new Map<string, ToolHandler>();

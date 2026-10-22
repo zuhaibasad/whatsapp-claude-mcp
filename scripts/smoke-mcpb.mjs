@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
-const file = path.resolve(process.argv[2] ?? path.join(root, 'build', `chatai-${pkg.version}.mcpb`));
+const file = path.resolve(process.argv[2] ?? path.join(root, 'build', `chatai-${pkg.version}-${process.platform === 'darwin' ? 'macos' : 'windows'}.mcpb`));
 if (!fs.existsSync(file)) {
   console.error(`missing ${file}: run npm run build:mcpb first`);
   process.exit(1);

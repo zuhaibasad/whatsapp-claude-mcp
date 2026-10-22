@@ -66,3 +66,10 @@ Newest first. Each entry: date, decision, reason, alternatives.
 - **Decision (user):** MIT for the project's own code: shorter and more familiar. The user is the sole copyright holder, so relicensing needs nobody else's consent.
 - **Trade-off:** MIT has no explicit patent grant (Apache-2.0 had one). `NOTICE` now just states MIT plus the third-party note.
 - **Not solved by this:** the `.mcpb` still bundles `libsignal` (GPL-3.0, via baileys). MIT is GPL-compatible for our code, but distributing the bundle publicly still has to meet GPL-3.0 for the combined work. See `docs/LICENSE_OPTIONS.md`. That decision is still open.
+
+## 2026-10-22 — macOS support; per-OS bundles; sharp dropped
+- **Decision (user):** support macOS too. `build:mcpb --target windows|macos` makes `chatai-<v>-windows.mcpb` (win32-x64) and `chatai-<v>-macos.mcpb` (darwin arm64 + x64). npm honours one `--cpu`, so the second architecture is installed separately and its native packages merged.
+- The code was already portable: data dir `~/Library/Application Support/chatai`, `@napi-rs/keyring` → macOS Keychain, `open` for URLs, `Browsers.macOS('Desktop')`. The MSIX migration is Windows-only.
+- **sharp/@img are not bundled:** baileys imports sharp lazily (with a catch), only for thumbnails and profile pictures when sending. That saves about 19 MB per architecture.
+- **Verification:** CI runs check, build:mcpb and smoke:mcpb on windows-latest and macos-latest. Not yet tried in a real Claude Desktop on a Mac.
+- Node 24 for source installs: better-sqlite3-multiple-ciphers has no Node 22 prebuild on Windows (it falls back to node-gyp).

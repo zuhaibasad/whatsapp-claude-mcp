@@ -2,6 +2,16 @@
 
 All notable changes. Versions follow [semver](https://semver.org/). Dates are release-build dates.
 
+## 0.4.0 (2026-10-22)
+
+### Added
+- **macOS support** (Apple Silicon and Intel): a separate `chatai-<version>-macos.mcpb`. Data lives in `~/Library/Application Support/chatai`, and the key in the macOS Keychain. The Windows file is now `chatai-<version>-windows.mcpb`.
+- CI on Windows and macOS: tests, then build and smoke-test each bundle.
+
+### Changed
+- Smaller bundles (Windows 23.7 → 15.4 MB): the image library `sharp` is no longer shipped. WhatsApp's library uses it only to make thumbnails when sending, which ChatAI never does.
+- Requires Node.js 24 when run from source (Claude Code). Claude Desktop is unaffected.
+
 ## 0.3.0 (2026-10-22)
 
 ### Added

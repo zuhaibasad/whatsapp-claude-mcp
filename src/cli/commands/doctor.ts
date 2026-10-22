@@ -27,7 +27,7 @@ export async function doctorCommand(opts: { project: string; json?: boolean }, i
   try {
     const d = buildDiagnosis({
       paths,
-      version: '0.3.0',
+      version: '0.4.0',
       now: deps.now,
       keyPresent,
       meta,
