@@ -3,7 +3,7 @@ import type { ListChatsQuery } from '../../core/contracts.js';
 import { loadConfig } from '../../config/index.js';
 import type { CliDeps } from '../deps.js';
 import { parseSince, parseDuration } from '../duration.js';
-import { formatTs, oneLine, table } from '../format.js';
+import { formatTs, oneLine, table, truncate } from '../format.js';
 import { CliError, type Io } from '../io.js';
 import { openStore } from '../open.js';
 
@@ -47,7 +47,7 @@ export async function chatsCommand(opts: ChatsOpts, io: Io, deps: CliDeps): Prom
     io.out(table(
       ['ID', 'NAME', 'TYPE', 'UNREVIEWED', 'INCLUDED', 'LAST MESSAGE'],
       chats.map((c) => [
-        c.id, c.name ?? '-', c.type, String(c.unreviewed), c.included ? 'yes' : 'no',
+        c.id, truncate(c.name ?? '-'), c.type, String(c.unreviewed), c.included ? 'yes' : 'no',
         c.lastMessageAt ? formatTs(c.lastMessageAt, config.timezone) : '-',
       ]),
     ));

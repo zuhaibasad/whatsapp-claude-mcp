@@ -30,3 +30,9 @@ export function table(headers: string[], rows: string[][]): string {
 export function oneLine(s: string | null): string {
   return (s ?? '').replace(/\s+/g, ' ').trim();
 }
+
+/** Shortens long text for table cells (counts code points, so emoji and Urdu are not split). */
+export function truncate(s: string, max = 40): string {
+  const chars = [...s];
+  return chars.length <= max ? s : chars.slice(0, max - 1).join('') + '…';
+}
