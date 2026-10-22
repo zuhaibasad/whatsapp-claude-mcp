@@ -6,6 +6,7 @@ import { daemonPhase3Command, daemonStartCommand, daemonStopCommand } from './co
 import { initCommand } from './commands/init.js';
 import { linkCommand } from './commands/link.js';
 import { chatsCommand, newCommand, purgeCommand, searchCommand } from './commands/read.js';
+import { registerChatSelection } from './commands/select.js';
 import { statusCommand } from './commands/status.js';
 import { unlinkCommand } from './commands/unlink.js';
 import { defaultDeps, type CliDeps } from './deps.js';
@@ -59,7 +60,7 @@ export function buildProgram(io: Io, deps: CliDeps, setExit: (code: number) => v
     .option('--json', 'machine-readable output')
     .action((o: { json?: boolean }) => run(() => statusCommand({ project: project(), json: o.json }, io, deps))());
 
-  program.command('chats')
+  const chats = program.command('chats')
     .description('list chats with unreviewed counts')
     .option('--all', 'include chats that are excluded by the filter')
     .option('--direct', 'direct chats only')
@@ -68,6 +69,7 @@ export function buildProgram(io: Io, deps: CliDeps, setExit: (code: number) => v
     .option('--json', 'machine-readable output')
     .action((o: { all?: boolean; direct?: boolean; groups?: boolean; activeSince?: string; json?: boolean }) =>
       run(() => chatsCommand({ project: project(), ...o }, io, deps))());
+  registerChatSelection(chats, run, project, io, deps);
 
   program.command('new')
     .description('show new messages grouped by chat')

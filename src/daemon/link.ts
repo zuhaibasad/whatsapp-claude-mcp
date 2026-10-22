@@ -1,7 +1,8 @@
 // Linking: shows QR codes via a callback until the user scans, then records the account.
 import fs from 'node:fs';
 import { loadConfig } from '../config/index.js';
-import type { MasterKeyStore, WaClient } from '../core/contracts.js';
+import { buildChatRows, computeRules, writeSelection, type ChatChoice } from '../config/selection.js';
+import type { ChatRow, Db, MasterKeyStore, RawMessage, WaClient } from '../core/contracts.js';
 import { createLogger, type Logger } from '../core/logger.js';
 import { resolvePaths } from '../core/paths.js';
 import { createMasterKeyStore } from '../crypto/index.js';
@@ -25,6 +26,65 @@ export interface LinkDeps {
 
 const MAX_RESTARTS = 3;
 
+/** Most excluded-chat messages kept in memory while the user chooses chats. */
+export const MAX_BUFFERED_MESSAGES = 50_000;
+
+/**
+ * Messages from chats the config excludes, held in memory only (never written to disk) until the user
+ * has chosen which chats to read. When full, the oldest messages are dropped.
+ */
+export class ExcludedBuffer {
+  private items: (RawMessage | undefined)[] = [];
+  private head = 0;
+  dropped = 0;
+
+  constructor(private readonly cap: number = MAX_BUFFERED_MESSAGES) {}
+
+  get size(): number {
+    return this.items.length - this.head;
+  }
+
+  add(msg: RawMessage): void {
+    this.items.push(msg);
+    while (this.size > this.cap) {
+      this.items[this.head++] = undefined;
+      this.dropped++;
+    }
+    if (this.head > 10_000 && this.head * 2 > this.items.length) {
+      this.items = this.items.slice(this.head);
+      this.head = 0;
+    }
+  }
+
+  /** Buffered messages grouped by chat, oldest first within each chat. */
+  byChat(): Map<string, RawMessage[]> {
+    const out = new Map<string, RawMessage[]>();
+    for (let i = this.head; i < this.items.length; i++) {
+      const m = this.items[i];
+      if (!m) continue;
+      const list = out.get(m.chatId);
+      if (list) list.push(m);
+      else out.set(m.chatId, [m]);
+    }
+    return out;
+  }
+
+  clear(): void {
+    this.items = [];
+    this.head = 0;
+  }
+}
+
+/** Deletes all stored messages of the given chats (the FTS triggers keep the search index in step). */
+export function deleteMessagesOfChats(db: Db, chatIds: string[]): number {
+  const del = db.prepare('DELETE FROM messages WHERE chat_id = ?');
+  return db.transaction(() => {
+    let n = 0;
+    for (const id of chatIds) n += del.run(id).changes;
+    return n;
+  })();
+}
+
 /**
  * After the first open, stay connected while WhatsApp delivers the initial sync to the new device,
  * store it, and close once events go quiet. Closing right at open dropped that sync and cut off
@@ -44,6 +104,13 @@ export async function linkAccount(opts: {
   /** Progress lines for the user (e.g. "receiving initial sync"). */
   onStatus?(msg: string): void;
   settle?: Partial<SettleOptions>;
+  /**
+   * Lets the user pick which chats to read, after the initial sync and after the WhatsApp connection is closed.
+   * Gets every known chat (also excluded ones); returns the chosen chat ids, or null to keep the config defaults.
+   */
+  chooseChats?(rows: ChatRow[]): Promise<Set<string> | null>;
+  /** Test hook: cap for the in-memory buffer of excluded-chat messages. */
+  bufferCap?: number;
   deps?: Partial<LinkDeps>;
 }): Promise<{ id: string; pushName: string | null }> {
   const paths = resolvePaths(opts.projectRoot);
@@ -59,6 +126,17 @@ export async function linkAccount(opts: {
   let client: WaClient | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let settleTimer: ReturnType<typeof setInterval> | null = null;
+  const buffer = new ExcludedBuffer(opts.bufferCap);
+  let clientClosed = false;
+  const closeClient = async (): Promise<void> => {
+    if (clientClosed) return;
+    clientClosed = true;
+    try {
+      await client?.close();
+    } catch {
+      // ignore
+    }
+  };
   try {
     try {
       lock = acquireLock(paths.lockFile);
@@ -82,6 +160,7 @@ export async function linkAccount(opts: {
     let config = loadConfig(paths).config;
     let me: { id: string; lid: string | null } | null = null;
     const ingestor = new Ingestor(store, () => config, () => (me ? { ...me, names: config.myNames } : null), logger);
+    if (opts.chooseChats) ingestor.onExcluded = (m) => buffer.add(m);
     let lastEventAt = Date.now();
     const guarded = (what: string, fn: () => void): void => {
       lastEventAt = Date.now();
@@ -100,7 +179,7 @@ export async function linkAccount(opts: {
     c.on('chats', (x) => guarded('chats', () => ingestor.onChats(x)));
     c.on('groups', (g) => guarded('groups', () => ingestor.onGroups(g)));
     c.on('contacts', (x) => guarded('contacts', () => ingestor.onContacts(x)));
-    return await new Promise<{ id: string; pushName: string | null }>((resolve, reject) => {
+    const result = await new Promise<{ id: string; pushName: string | null }>((resolve, reject) => {
       let settled = false;
       let restarts = 0;
       const fail = (err: Error): void => {
@@ -192,14 +271,34 @@ export async function linkAccount(opts: {
       });
       connect();
     });
+    if (opts.chooseChats) {
+      await closeClient();
+      ingestor.onExcluded = undefined;
+      if (buffer.dropped > 0) {
+        logger.warn({ dropped: buffer.dropped, kept: buffer.size }, 'excluded-chat buffer full; oldest messages dropped');
+      }
+      const rows = buildChatRows(store, config);
+      const chosen = await opts.chooseChats(rows);
+      if (chosen) {
+        const all: ChatChoice[] = rows.map((r) => ({ id: r.id, name: r.name, type: r.type }));
+        writeSelection(paths, computeRules(all, chosen, config), all);
+        config = loadConfig(paths).config;
+        ingestor.recomputeIncluded();
+        const excludedNow = store.listChats({}).filter((c) => !c.included).map((c) => c.id);
+        const removed = deleteMessagesOfChats(dbs.storeDb, excludedNow);
+        const included = new Set(store.listChats({ includedOnly: true }).map((c) => c.id));
+        const restored: RawMessage[] = [];
+        for (const [chatId, msgs] of buffer.byChat()) if (included.has(chatId)) restored.push(...msgs);
+        ingestor.onMessages(restored);
+        logger.info({ removed, restored: restored.length }, 'chat choice applied');
+      }
+    }
+    return result;
   } finally {
+    buffer.clear();
     if (timer) clearTimeout(timer);
     if (settleTimer) clearInterval(settleTimer);
-    try {
-      await client?.close();
-    } catch {
-      // ignore
-    }
+    await closeClient();
     dbs?.close();
     lock?.release();
     fs.rmSync(paths.qrPng, { force: true });
