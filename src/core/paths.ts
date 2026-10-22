@@ -22,10 +22,17 @@ export interface DataPaths {
  * Windows %LOCALAPPDATA%\wa-bridge · macOS ~/Library/Application Support/wa-bridge · Linux $XDG_DATA_HOME/wa-bridge.
  * WA_BRIDGE_HOME overrides it (tests, development).
  */
+/** Old Windows default (0.1.0). Inside Claude Desktop it maps to the MSIX-redirected folder; migrated on start. */
+export function legacyWindowsDataDir(env: NodeJS.ProcessEnv = process.env): string | null {
+  return env.LOCALAPPDATA ? path.join(env.LOCALAPPDATA, 'wa-bridge') : null;
+}
+
 export function defaultDataDir(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string {
   if (env.WA_BRIDGE_HOME) return path.resolve(env.WA_BRIDGE_HOME);
   const home = env.USERPROFILE ?? env.HOME ?? '.';
-  if (platform === 'win32') return path.join(env.LOCALAPPDATA ?? path.join(home, 'AppData', 'Local'), 'wa-bridge');
+  // Not %LOCALAPPDATA%: Claude Desktop (MSIX) silently redirects NEW folders under AppData into its package
+  // (Packages\Claude_*\LocalCache), so Claude Code and the CLI would see a different folder (R3 addendum).
+  if (platform === 'win32') return path.join(home, '.wa-bridge');
   if (platform === 'darwin') return path.join(home, 'Library', 'Application Support', 'wa-bridge');
   return path.join(env.XDG_DATA_HOME ?? path.join(home, '.local', 'share'), 'wa-bridge');
 }

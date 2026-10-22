@@ -10,9 +10,9 @@ describe('scaffold', () => {
 });
 
 describe('user data dir', () => {
-  it('uses LOCALAPPDATA on Windows and WA_BRIDGE_HOME when set', async () => {
+  it('uses %USERPROFILE%\\.wa-bridge on Windows (not AppData) and WA_BRIDGE_HOME when set', async () => {
     const { defaultDataDir, resolveUserPaths } = await import('../src/core/paths.js');
-    expect(defaultDataDir({ LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local' }, 'win32')).toMatch(/AppData[\\/]Local[\\/]wa-bridge$/);
+    expect(defaultDataDir({ USERPROFILE: 'C:\\Users\\a', LOCALAPPDATA: 'C:\\Users\\a\\AppData\\Local' }, 'win32')).toMatch(/Users[\\/]a[\\/]\.wa-bridge$/);
     expect(defaultDataDir({ WA_BRIDGE_HOME: '/tmp/x' }, 'win32')).toMatch(/x$/);
     const p = resolveUserPaths('/tmp/wab');
     expect(p.projectRoot).toBe(p.dataDir);
