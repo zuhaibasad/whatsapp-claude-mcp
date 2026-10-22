@@ -1,12 +1,14 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { ChatRow } from '../../src/core/contracts.js';
 import {
-  accountLabel, applyToVisible, displayName, filterRows, initialSelection, phoneFromJid, relativeTime,
-  screenFor, selectionCounts, selectionHeader, shouldPoll, tabCounts, unwrap, visibleRange,
+  accountLabel, applyToVisible, channelCounts, displayName, filterRows, formatPhone, initialScreenFrom, initialSelection,
+  matchesQuery, opensPicker, phoneFromJid, relativeTime, screenFor, screenFromSearch, selectionCounts, selectionHeader,
+  shouldPoll, showPermissionsStep, sortRows, subPhone, tabCounts, unreadLabel, unwrap, visibleRange,
 } from '../../ui/logic.js';
 
-const row = (id: string, name: string | null, type: 'group' | 'direct', pre = false): ChatRow =>
-  ({ id, name, type, phone: null, participantCount: null, lastMessageAt: null, unreadCount: null, preselected: pre });
+const row = (id: string, name: string | null, type: 'group' | 'direct' | 'channel', pre = false, extra: Partial<ChatRow> = {}): ChatRow =>
+  ({ id, name, type, phone: null, participantCount: null, lastMessageAt: null, unreadCount: null, preselected: pre, ...extra });
 
 const rows: ChatRow[] = [
   row('1@g.us', 'Family 🏡', 'group', true),
@@ -19,14 +21,15 @@ const rows: ChatRow[] = [
 describe('ui logic', () => {
   it('display name fallback', () => {
     expect(displayName(rows[3]!)).toBe('+923002');
-    expect(displayName(rows[4]!)).toBe('Unknown');
+    expect(displayName(rows[4]!)).toBe('Unknown contact');
+    expect(displayName(row('999@lid', null, 'direct', false, { phone: '+923001234567' }))).toBe('+92 300 1234567');
     expect(displayName(rows[1]!)).toBe('خاندان کا گروپ');
-    expect(displayName(row('x@g.us', '  ', 'group'))).toBe('Unknown');
+    expect(displayName(row('x@g.us', '  ', 'group'))).toBe('Unknown contact');
     expect(phoneFromJid('92300123:12@s.whatsapp.net')).toBe('+92300123');
   });
 
   it('tab counts and filtering (name and id, case-insensitive)', () => {
-    expect(tabCounts(rows)).toEqual({ all: 5, groups: 2, direct: 3 });
+    expect(tabCounts(rows)).toEqual({ all: 5, groups: 2, direct: 3, channels: 0 });
     expect(filterRows(rows, 'groups', '')).toHaveLength(2);
     expect(filterRows(rows, 'direct', '')).toHaveLength(3);
     expect(filterRows(rows, 'all', 'FAMILY').map((r) => r.id)).toEqual(['1@g.us']);
@@ -93,5 +96,83 @@ describe('ui logic', () => {
     expect(unwrap('chatRows', { rows })).toBe(rows);
     expect(unwrap('chatRows', rows)).toBe(rows);
     expect(unwrap('submitSelection', { summary: null })).toBeNull();
+  });
+
+  it('phone formatting and sub-line phone', () => {
+    expect(formatPhone('+923001234567')).toBe('+92 300 1234567');
+    expect(formatPhone('+447700900123')).toBe('+447700900123');
+    expect(formatPhone('12')).toBeNull();
+    expect(formatPhone(null)).toBeNull();
+    const named = row('l@lid', 'Ali', 'direct', false, { phone: '+923001234567' });
+    expect(subPhone(named)).toBe('+92 300 1234567');
+    expect(subPhone(row('l@lid', null, 'direct', false, { phone: '+923001234567' }))).toBeNull(); // phone is already the title
+    expect(subPhone(row('g@g.us', 'Fam', 'group'))).toBeNull();
+  });
+
+  it('unread label', () => {
+    expect(unreadLabel(0)).toBeNull();
+    expect(unreadLabel(null)).toBeNull();
+    expect(unreadLabel(7)).toBe('7');
+    expect(unreadLabel(250)).toBe('99+');
+  });
+
+  const mixed: ChatRow[] = [
+    row('g1@g.us', 'G old', 'group', false, { lastMessageAt: 100, unreadCount: 0 }),
+    row('d1@s.whatsapp.net', 'D newest', 'direct', false, { lastMessageAt: 500, unreadCount: 1 }),
+    row('g2@g.us', 'G mid', 'group', false, { lastMessageAt: 300, unreadCount: 9 }),
+    row('d2@lid', null, 'direct', false, { lastMessageAt: null, unreadCount: null, phone: '+923001234567' }),
+    row('c1@newsletter', 'News', 'channel', false, { lastMessageAt: 400, unreadCount: 50 }),
+    row('d3@s.whatsapp.net', 'D mid', 'direct', false, { lastMessageAt: 300, unreadCount: 9 }),
+  ];
+
+  it('tab counts keep channels apart', () => {
+    expect(tabCounts(mixed)).toEqual({ all: 5, groups: 2, direct: 3, channels: 1 });
+    expect(filterRows(mixed, 'channels', '').map((r) => r.id)).toEqual(['c1@newsletter']);
+    expect(filterRows(mixed, 'direct', '').some((r) => r.type === 'channel')).toBe(false);
+    expect(filterRows(mixed, 'all', '').some((r) => r.type === 'channel')).toBe(false);
+    expect(channelCounts(mixed, new Set(['c1@newsletter']))).toEqual({ selected: 1, total: 1 });
+    expect(selectionCounts(mixed, new Set())).toEqual({ groupsSelected: 0, groupsTotal: 2, directSelected: 0, directTotal: 3 });
+    expect(selectionHeader(selectionCounts(mixed, new Set()), channelCounts(mixed, new Set()))).toContain('0 of 1 channels');
+  });
+
+  it('recent sort interleaves All, nulls last; unread-first then recent', () => {
+    expect(filterRows(mixed, 'all', '', 'recent').map((r) => r.id)).toEqual(['d1@s.whatsapp.net', 'g2@g.us', 'd3@s.whatsapp.net', 'g1@g.us', 'd2@lid']);
+    expect(sortRows(mixed, 'unread').map((r) => r.id)).toEqual(['c1@newsletter', 'g2@g.us', 'd3@s.whatsapp.net', 'd1@s.whatsapp.net', 'g1@g.us', 'd2@lid']);
+    expect(mixed[0]!.id).toBe('g1@g.us'); // input not mutated
+  });
+
+  it('phone digit search variants (shared vectors)', () => {
+    const file = JSON.parse(readFileSync(new URL('../fixtures/phone-search-vectors.json', import.meta.url), 'utf8')) as {
+      vectors: { query: string; name: string | null; phone: string | null; match: boolean }[];
+    };
+    expect(file.vectors.length).toBeGreaterThan(10);
+    for (const v of file.vectors) {
+      expect(matchesQuery({ id: 'x@lid', name: v.name, phone: v.phone }, v.query), JSON.stringify(v)).toBe(v.match);
+    }
+    // phone found through the row in the picker, including a leading 0
+    expect(filterRows(mixed, 'all', '0300 1234567').map((r) => r.id)).toEqual(['d2@lid']);
+  });
+
+  it('initialScreen routing (auto/chats x state)', () => {
+    expect(screenFromSearch('?screen=chats')).toBe('chats');
+    expect(screenFromSearch('?mock=1')).toBeNull();
+    expect(initialScreenFrom({ initialScreen: 'chats' })).toBe('chats');
+    expect(initialScreenFrom({ initialScreen: 'auto' })).toBe('auto');
+    expect(initialScreenFrom({ initialScreen: 'zzz' })).toBeNull();
+    expect(initialScreenFrom(undefined)).toBeNull();
+    expect(opensPicker('chats', 'done')).toBe(true);
+    expect(opensPicker('chats', 'choose_chats')).toBe(true);
+    expect(opensPicker('chats', 'needs_accept')).toBe(false);
+    expect(opensPicker('chats', 'linking')).toBe(false);
+    expect(opensPicker('chats', 'syncing')).toBe(false);
+    expect(opensPicker('auto', 'done')).toBe(false);
+    expect(opensPicker(null, 'choose_chats')).toBe(false);
+  });
+
+  it('permissions step shows once, only after onboarding save', () => {
+    expect(showPermissionsStep('choose_chats', false)).toBe(true);
+    expect(showPermissionsStep('choose_chats', true)).toBe(false);
+    expect(showPermissionsStep('done', false)).toBe(false); // later visit
+    expect(showPermissionsStep(null, false)).toBe(false);
   });
 });
