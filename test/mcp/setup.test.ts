@@ -10,6 +10,7 @@ import { createServer, type McpDeps } from '../../src/mcp/server.js';
 import { G1, G2, T0, harness, msg, type Harness } from './helpers.js';
 
 const NONCE = 'NONCE-abc123-secret';
+const DNONCE = 'DISCONNECT-NONCE-zzz';
 const QR = '<svg>QR-SECRET</svg>';
 
 function state(over: Partial<SetupState> = {}): SetupState {
@@ -26,10 +27,13 @@ function fakeHost() {
     chatRows: async () => [],
     submitSelection: async () => null,
     waitForSync: async () => ({ collector: 'live', waitedMs: 1200 }),
+    disconnect: async () => state({ step: 'ready_to_link', qrSvg: null }),
+    diagnose: async () => ({ version: '0.1.0', dataDir: 'C:\\x', checks: [{ name: 'data_dir', ok: true, detail: 'fine' }] }),
   };
   const host: HostBridge = {
     ops: () => ops,
-    mintNonce: async () => { calls.push('mint'); return NONCE; },
+    mintNonce: async (kind) => { calls.push(`mint:${kind ?? 'accept'}`); return kind === 'disconnect' ? DNONCE : NONCE; },
+    disconnect: async (n, keep) => { calls.push(`disconnect:${n}:${keep}`); return state({ step: 'ready_to_link', qrSvg: null }); },
     openSetup: async (screen) => { calls.push(`open:${screen ?? 'auto'}`); },
     acceptRisk: async (n) => { calls.push(`accept:${n}`); return state({ step: 'ready_to_link', qrSvg: null }); },
     stop: async () => undefined,
@@ -65,7 +69,7 @@ function connect(deps: McpDeps, capabilities: Record<string, unknown>) {
 }
 
 const UI_CAPS = { extensions: { 'io.modelcontextprotocol/ui': { mimeTypes: ['text/html;profile=mcp-app'] } } };
-const APP_ONLY = ['setup_accept_risk', 'setup_cancel_link', 'setup_chat_rows', 'setup_start_link', 'setup_state', 'setup_submit_selection'];
+const APP_ONLY = ['setup_accept_risk', 'setup_cancel_link', 'setup_chat_rows', 'setup_disconnect', 'setup_start_link', 'setup_state', 'setup_submit_selection'];
 
 describe('capability detection', () => {
   it('hides app-only tools from clients without MCP Apps', async () => {
@@ -133,6 +137,18 @@ describe('whatsapp_setup', () => {
     await c.close();
   });
 
+  it('screen disconnect opens the panel on the disconnect screen and never disconnects by itself', async () => {
+    const f = fakeHost();
+    h = harness({ getHost: () => f.host });
+    const c = await connect(h.deps, UI_CAPS);
+    const r = await c.request('tools/call', { name: 'whatsapp_setup', arguments: { screen: 'disconnect' } });
+    expect(r.result.structuredContent).toEqual({ initialScreen: 'disconnect' });
+    expect(f.calls).toEqual([]);
+    const tools: { name: string }[] = (await c.request('tools/list')).result.tools;
+    expect(tools.map((t) => t.name)).not.toContain('whatsapp_disconnect');
+    await c.close();
+  });
+
   it('says the collector is starting when the host is not ready', async () => {
     h = harness();
     const c = await connect(h.deps, {});
@@ -151,13 +167,14 @@ describe('setup panel resource and app tools', () => {
     const item = res.result.contents[0];
     expect(item.mimeType).toBe('text/html;profile=mcp-app');
     expect(item.text).toContain(`window.__WA_NONCE__=${JSON.stringify(NONCE)}`);
-    expect(f.calls).toEqual(['mint']);
+    expect(item.text).toContain(`window.__WA_DISCONNECT_NONCE__=${JSON.stringify(DNONCE)}`);
+    expect(f.calls).toEqual(['mint:accept', 'mint:disconnect']);
 
     const results: string[] = [];
     const calls: [string, Record<string, unknown>][] = [
       ['whatsapp_setup', {}], ['whatsapp_setup', { screen: 'chats' }], ['whatsapp_status', { wait_for_sync_seconds: 2 }], ['whatsapp_brief', {}], ['setup_state', {}],
       ['setup_accept_risk', { nonce: NONCE }], ['setup_start_link', {}], ['setup_cancel_link', {}],
-      ['setup_chat_rows', {}], ['setup_submit_selection', { selectedIds: null }],
+      ['setup_chat_rows', {}], ['setup_submit_selection', { selectedIds: null }], ['setup_disconnect', { nonce: DNONCE, keepData: true }],
     ];
     for (const [name, args] of calls) {
       const r = await c.request('tools/call', { name, arguments: args });
@@ -165,6 +182,8 @@ describe('setup panel resource and app tools', () => {
       results.push(JSON.stringify(r.result));
     }
     expect(results.join('\n')).not.toContain(NONCE);
+    expect(results.join('\n')).not.toContain(DNONCE);
+    expect(f.calls).toContain(`disconnect:${DNONCE}:true`);
     expect(f.calls).toContain(`accept:${NONCE}`);
     await c.close();
   });
@@ -188,6 +207,36 @@ describe('setup panel resource and app tools', () => {
     const res = await c.request('resources/read', { uri: 'ui://wa-bridge/setup.html' });
     expect(res.result.contents[0].text).toContain('not installed');
     await c.close();
+  });
+});
+
+describe('per-chat notes', () => {
+  it('appear in brief and read messages, matched by id or case-insensitive name', async () => {
+    h = harness();
+    h.store.insertMessage(msg({ chatId: G1 }));
+    h.store.insertMessage(msg({ chatId: G2 }));
+    fs.mkdirSync(path.join(h.dir, '.wa-bridge'), { recursive: true });
+    fs.writeFileSync(path.join(h.dir, '.wa-bridge', 'departments.yaml'), [
+      'chats:', '  - chat: "erp support 🚀"', '    department: ERP', '    note: "Supplier invoices"',
+      `  - chat: "${G2}"`, '    note: "Roman Urdu: kal tak = urgent"',
+    ].join('\n'));
+    const brief = await h.call('whatsapp_brief', { wait_for_sync_seconds: 0, since: '30d' });
+    const chats = brief.json.new_messages.chats as { id: string; chat_note?: { department: string | null; note: string | null } }[];
+    expect(chats.find((c) => c.id === G1)?.chat_note).toEqual({ department: 'ERP', note: 'Supplier invoices' });
+    expect(chats.find((c) => c.id === G2)?.chat_note?.note).toContain('kal tak');
+    const read = await h.call('whatsapp_read', { action: 'messages', chat: G1 });
+    expect(read.json.chat.chat_note.department).toBe('ERP');
+  });
+});
+
+describe('whatsapp_status diagnose', () => {
+  it('includes the diagnosis only when asked', async () => {
+    const f = fakeHost();
+    h = harness({ getHost: () => f.host });
+    const plain = await h.call('whatsapp_status', {});
+    expect(plain.json.diagnosis).toBeUndefined();
+    const r = await h.call('whatsapp_status', { diagnose: true });
+    expect(r.json.diagnosis).toMatchObject({ checks: [{ name: 'data_dir', ok: true }] });
   });
 });
 

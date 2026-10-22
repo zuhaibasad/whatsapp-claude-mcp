@@ -102,3 +102,12 @@ p { margin: 0 0 14px; }
   .card { padding: 20px 16px; }
   .actions.split { flex-direction: column-reverse; align-items: stretch; }
 }
+
+/* Disconnect confirmation */
+.choices { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }
+.choice { display: flex; gap: 12px; align-items: flex-start; padding: 14px; border: 2px solid var(--line); border-radius: 12px; cursor: pointer; font-weight: 600; }
+.choice input { width: 22px; height: 22px; flex: none; accent-color: var(--accent); margin-top: 1px; }
+.choice:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.choice.risky:has(input:checked) { border-color: #c62828; background: rgba(198, 40, 40, 0.1); }
+.btn.primary.danger { background: #c62828; color: #ffffff; }
+.notice { padding: 12px 14px; background: var(--warn-soft); border-radius: 10px; font-weight: 600; }

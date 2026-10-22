@@ -6,7 +6,7 @@ import { getUiCapability, registerAppResource, RESOURCE_MIME_TYPE } from '@model
 import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import type { DataPaths } from '../core/paths.js';
-import type { SetupState } from '../core/service.js';
+import type { SetupScreen, SetupState } from '../core/service.js';
 import type { HostBridge } from './host.js';
 import type { McpDeps, ToolHandler, ToolResult } from './server.js';
 import { text } from './server.js';
@@ -61,8 +61,10 @@ export function registerSetupUi(ctx: SetupUiCtx): void {
   // The panel. A fresh nonce is minted on every read and embedded only in this HTML.
   registerAppResource(server, 'WhatsApp setup panel', SETUP_URI, { description: 'Link WhatsApp and choose which chats wa-bridge reads.' },
     async () => {
-      const nonce = await (await needHost()).mintNonce();
-      const inject = `<script>window.__WA_NONCE__=${JSON.stringify(nonce)};</script>`;
+      const bridge = await needHost();
+      const nonce = await bridge.mintNonce();
+      const disconnectNonce = await bridge.mintNonce('disconnect');
+      const inject = `<script>window.__WA_NONCE__=${JSON.stringify(nonce)};window.__WA_DISCONNECT_NONCE__=${JSON.stringify(disconnectNonce)};</script>`;
       const html = loadHtml(deps);
       const withNonce = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + inject) : inject + html;
       return {
@@ -74,11 +76,11 @@ export function registerSetupUi(ctx: SetupUiCtx): void {
     });
 
   plain('whatsapp_setup',
-    'Open the WhatsApp panel to link an account or choose chats. Use it to set up or re-link, and with screen "chats" whenever the user wants to add, remove or browse chats without naming them.',
-    z.object({ screen: z.enum(['auto', 'chats']).optional().describe('"chats" opens the chat picker (when linked); default "auto"') }),
+    'Open the WhatsApp panel to link an account or choose chats. Use it to set up or re-link, with screen "chats" whenever the user wants to add, remove or browse chats without naming them, or screen "disconnect" when the user wants to disconnect/unlink WhatsApp (the user confirms in the panel).',
+    z.object({ screen: z.enum(['auto', 'chats', 'disconnect']).optional().describe('"chats" opens the chat picker (when linked), "disconnect" the disconnect confirmation; default "auto"') }),
     { readOnlyHint: false },
     async (a) => {
-      const screen: 'auto' | 'chats' = a.screen === 'chats' ? 'chats' : 'auto';
+      const screen: SetupScreen = a.screen === 'chats' || a.screen === 'disconnect' ? a.screen : 'auto';
       if (uiOn()) {
         return {
           content: [{ type: 'text', text: JSON.stringify({ shown: true, message: 'The panel is shown to the user. Wait for them to finish there; do not ask for any codes. Afterwards call whatsapp_status.' }) }],
@@ -105,6 +107,9 @@ export function registerSetupUi(ctx: SetupUiCtx): void {
     plain('setup_accept_risk', 'UI only: record that the user accepted the risk notice.',
       z.object({ nonce: z.string().min(1) }), { readOnlyHint: false },
       async (a) => minimal(await (await needHost()).acceptRisk(String(a.nonce))), APP_ONLY);
+    plain('setup_disconnect', 'UI only: disconnect WhatsApp (needs the single-use disconnect code from the panel).',
+      z.object({ nonce: z.string().min(1), keepData: z.boolean() }), { readOnlyHint: false },
+      async (a) => minimal(await (await needHost()).disconnect(String(a.nonce), a.keepData === true)), APP_ONLY);
     plain('setup_start_link', 'UI only: start linking WhatsApp (shows a QR in the panel).', none, { readOnlyHint: false },
       async () => minimal(await (await ops()).startLink()), APP_ONLY);
     plain('setup_cancel_link', 'UI only: cancel linking.', none, { readOnlyHint: false },

@@ -1,15 +1,18 @@
 // The lock holder's brain: databases, collector and the setup state machine (SetupOps).
 import fs from 'node:fs';
+import path from 'node:path';
 import QRCode from 'qrcode';
 import { buildChatRows, computeRules, writeSelection, type ChatChoice } from '../config/selection.js';
 import { loadConfig } from '../config/index.js';
 import type { ChatRow, MasterKeyStore } from '../core/contracts.js';
 import type { Logger } from '../core/logger.js';
 import type { DataPaths } from '../core/paths.js';
-import type { CollectorState, SelectionSummary, SetupState, SetupStep } from '../core/service.js';
+import type { CollectorState, Diagnosis, SelectionSummary, SetupScreen, SetupState, SetupStep } from '../core/service.js';
 import { runLinkSession } from '../daemon/link.js';
 import { openDaemonDbs, startCollector, type CollectorHandle, type OpenedDbs } from '../daemon/runner.js';
 import { OneTimeStore } from './auth.js';
+import { backupBeforeMigration } from './backup.js';
+import { buildDiagnosis } from './diagnose.js';
 import { initDataFiles } from './init.js';
 import { BROWSER_TOKEN_TTL_MS, HostError, NONCE_TTL_MS, type HostDeps, type HostOps } from './types.js';
 
@@ -20,12 +23,15 @@ const NEXT_QR_S = 20;
 export class HolderCore implements HostOps {
   readonly nonces: OneTimeStore;
   readonly browserTokens: OneTimeStore;
+  readonly disconnectNonces: OneTimeStore;
 
   private keyStore: MasterKeyStore;
   private dbs: OpenedDbs | null = null;
   private collector: CollectorHandle | null = null;
   private collectorSeen: CollectorState = 'not_linked';
   private initError: string | null = null;
+  private notice: string | null = null; // non-fatal message for the UI (e.g. offline disconnect)
+  private disconnecting = false;
   private port = 0;
 
   // flow state (null = at rest, the step is derived from the stores)
@@ -50,6 +56,7 @@ export class HolderCore implements HostOps {
     this.keyStore = deps.keyStore(paths.projectRoot);
     this.nonces = new OneTimeStore(deps.now);
     this.browserTokens = new OneTimeStore(deps.now);
+    this.disconnectNonces = new OneTimeStore(deps.now);
   }
 
   setPort(port: number): void {
@@ -99,7 +106,7 @@ export class HolderCore implements HostOps {
       account: this.account ?? this.storedAccount(),
       sync: this.sync,
       collector: this.collectorState(),
-      error: step === 'error' ? (this.flowError ?? this.initError) : null,
+      error: step === 'error' ? (this.flowError ?? this.initError) : this.notice,
       version: this.deps.version,
     };
   }
@@ -112,6 +119,7 @@ export class HolderCore implements HostOps {
   /** Called by the HTTP layer after it verified a browser session or a nonce. */
   async acceptVerified(): Promise<SetupState> {
     if (this.flow === null && this.step() !== 'needs_accept') return this.state();
+    this.notice = null;
     if (this.dbs) {
       this.dbs.store.setMeta('risk_accepted_at', String(Math.floor(this.deps.now() / 1000)));
     } else {
@@ -128,6 +136,7 @@ export class HolderCore implements HostOps {
     const rest = this.restStep();
     if (rest === 'needs_accept') throw new HostError(409, 'the risk warning has not been accepted yet');
     if (rest === 'done' && this.collector) throw new HostError(409, 'already linked');
+    this.notice = null;
     await initDataFiles(this.paths, this.keyStore);
     if (!this.dbs) await this.openDbs();
     const dbs = this.requireDbs();
@@ -211,16 +220,110 @@ export class HolderCore implements HostOps {
     return { collector: this.collectorState(), waitedMs: this.deps.now() - t0 };
   }
 
-  // ---------- host-only ops ----------
-
-  async mintNonce(): Promise<{ nonce: string }> {
-    return { nonce: this.nonces.mint(NONCE_TTL_MS) };
+  /** Needs a disconnect nonce (panel). The HTTP layer calls disconnectVerified after checking a session or nonce itself. */
+  async disconnect(opts: { keepData: boolean; nonce?: string }): Promise<SetupState> {
+    if (!this.disconnectNonces.consume(opts.nonce)) throw new HostError(403, 'disconnecting needs the setup panel or a browser session');
+    return this.disconnectVerified({ keepData: opts.keepData });
   }
 
-  async openSetup(screen?: 'auto' | 'chats'): Promise<{ opened: true }> {
+  async diagnose(): Promise<Diagnosis> {
+    let keyPresent: boolean | null;
+    try { keyPresent = this.keyStore.get() !== null; } catch { keyPresent = null; }
+    let link: string | null = null;
+    try { link = this.dbs?.store.getAccount()?.linkStatus ?? null; } catch { /* reported as unlinked */ }
+    const store = this.dbs?.store;
+    return buildDiagnosis({
+      paths: this.paths,
+      version: this.deps.version,
+      now: this.deps.now,
+      keyPresent,
+      meta: store ? (k) => store.getMeta(k) : null,
+      linkStatus: link,
+      collector: this.collectorState(),
+    });
+  }
+
+  /**
+   * Stops the collector, logs the device out of WhatsApp (WaClient.unlink, the one approved logout path), wipes the
+   * session and, unless keepData, everything else. The lock stays with this process.
+   */
+  async disconnectVerified(opts: { keepData: boolean }): Promise<SetupState> {
+    if (this.disconnecting) return this.state();
+    this.disconnecting = true;
+    try {
+      this.abort?.abort();
+      this.resolvePick(null);
+      try { await this.linkPromise; } catch { /* reported through state */ }
+      this.flow = null;
+      this.flowError = null;
+      await this.stopCollector();
+
+      let note: string | null = null;
+      const dbs = this.dbs;
+      if (dbs && dbs.auth.hasCreds()) {
+        const client = this.deps.waClientFactory({ auth: dbs.auth, logger: this.logger });
+        try {
+          const opened = new Promise<boolean>((resolve) => {
+            const timer = setTimeout(() => resolve(false), this.deps.disconnectTimeoutMs);
+            client.on('connection', (s) => {
+              if (s.state === 'open') { clearTimeout(timer); resolve(true); }
+              else if (s.state === 'close') { clearTimeout(timer); resolve(false); }
+            });
+          });
+          await client.connect();
+          if (await opened) await client.unlink();
+          else note = 'x';
+        } catch {
+          note = 'x';
+        } finally {
+          try { await client.close(); } catch { /* ignore */ }
+        }
+        if (note) note = 'Could not reach WhatsApp; remove the device on your phone: Settings → Linked devices';
+      }
+
+      if (opts.keepData && dbs) {
+        try { dbs.store.setLinkStatus('unlinked'); } catch { /* cosmetic */ }
+      }
+      dbs?.close();
+      this.dbs = null;
+      const rm = (file: string): void => {
+        for (const f of [file, `${file}-wal`, `${file}-shm`, `${file}-journal`]) fs.rmSync(f, { force: true });
+      };
+      rm(this.paths.authDb);
+      fs.rmSync(this.paths.qrPng, { force: true });
+      this.account = null;
+      this.sync = null;
+      this.qrSvg = null;
+      this.collectorSeen = 'not_linked';
+      this.initError = null;
+      if (opts.keepData) {
+        await this.openDbs();
+      } else {
+        rm(this.paths.storeDb);
+        for (const f of [this.paths.config, this.paths.departments, this.paths.priorities]) fs.rmSync(f, { force: true });
+        fs.rmSync(this.paths.exportsDir, { recursive: true, force: true });
+        fs.rmSync(path.join(this.paths.dataDir, 'backups'), { recursive: true, force: true });
+        this.keyStore.delete();
+      }
+      this.notice = note;
+      this.logger.info({ keepData: opts.keepData, remote: note === null }, 'disconnected');
+      this.notify();
+      return this.state();
+    } finally {
+      this.disconnecting = false;
+    }
+  }
+
+  // ---------- host-only ops ----------
+
+  async mintNonce(kind: 'accept' | 'disconnect' = 'accept'): Promise<{ nonce: string }> {
+    return { nonce: (kind === 'disconnect' ? this.disconnectNonces : this.nonces).mint(NONCE_TTL_MS) };
+  }
+
+  async openSetup(screen?: SetupScreen): Promise<{ opened: true }> {
     if (!this.port) throw new HostError(503, 'the control server is not listening yet');
     const token = this.browserTokens.mint(BROWSER_TOKEN_TTL_MS);
-    this.deps.openUrl(`http://127.0.0.1:${this.port}/setup?t=${token}${screen === 'chats' ? '&screen=chats' : ''}`);
+    this.deps.openUrl(`http://127.0.0.1:${this.port}/setup?t=${token}${screen === 'chats' || screen === 'disconnect' ? `&screen=${screen}` : ''}`);
     return { opened: true };
   }
 
@@ -238,6 +341,11 @@ export class HolderCore implements HostOps {
   private async openDbs(): Promise<void> {
     const master = this.keyStore.get();
     if (!master) throw new Error('no encryption key found');
+    // Encrypted copy of the databases before an older schema is upgraded (never blocks startup).
+    backupBeforeMigration(this.paths.dataDir, master, {
+      now: this.deps.now,
+      onError: (e) => this.logger.warn({ err: msg(e) }, 'backup before migration failed'),
+    });
     this.dbs = await openDaemonDbs(this.paths, master);
   }
 

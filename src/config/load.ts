@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { z } from 'zod';
 import { DEFAULT_MAX_TEXT_CHARS, DEFAULT_RETENTION_DAYS } from '../core/constants.js';
-import type { Config, Department, PriorityRules } from '../core/contracts.js';
+import type { ChatNote, Config, Department, PriorityRules } from '../core/contracts.js';
 import type { DataPaths } from '../core/paths.js';
 
 /** Thrown for unreadable YAML or invalid values. The message always starts with the file path. */
@@ -151,9 +151,39 @@ export function loadConfig(paths: DataPaths): { config: Config; warnings: string
   return { config, warnings };
 }
 
+const ChatNoteSchema = z.object({
+  chat: z.union([z.string(), z.number()]).transform((v) => String(v)).refine((s) => s.trim() !== '', 'must not be empty'),
+  department: z.string().nullish(),
+  note: z.string().nullish(),
+});
+
 /**
- * Reads departments.yaml (a top-level list). A missing file gives [] plus a warning
- * pushed onto `warnings` (optional out-param, keeps the signature `Department[]`).
+ * departments.yaml is either a top-level list of departments, or a mapping with `departments:` and/or `chats:`.
+ * Returns the raw lists (validated by the callers). Anything else throws.
+ */
+function readDepartmentsDoc(file: string, read: YamlRead & { exists: true }): { departments: unknown[]; chats: unknown[]; warnings: string[] } {
+  const data = read.data;
+  if (data === null || data === undefined) return { departments: [], chats: [], warnings: [] };
+  if (Array.isArray(data)) return { departments: data as unknown[], chats: [], warnings: [] };
+  const isMap = typeof data === 'object' && ('departments' in (data as object) || 'chats' in (data as object));
+  if (!isMap) throw new ConfigError(file, 'expected a list of departments, each with name, keywords and examples');
+  const obj = data as Record<string, unknown>;
+  const list = (key: string): unknown[] => {
+    const v = obj[key];
+    if (v === null || v === undefined) return [];
+    if (!Array.isArray(v)) throw new ConfigError(file, `"${key}" must be a list`);
+    return v as unknown[];
+  };
+  return {
+    departments: list('departments'),
+    chats: list('chats'),
+    warnings: unknownKeyWarnings(obj, ['departments', 'chats'], file),
+  };
+}
+
+/**
+ * Reads departments.yaml (a top-level list, or a mapping with `departments:` and `chats:`). A missing file gives []
+ * plus a warning pushed onto `warnings` (optional out-param, keeps the signature `Department[]`).
  */
 export function loadDepartments(paths: DataPaths, warnings: string[] = []): Department[] {
   const file = paths.departments;
@@ -162,14 +192,11 @@ export function loadDepartments(paths: DataPaths, warnings: string[] = []): Depa
     warnings.push(`${file}: not found, no departments defined`);
     return [];
   }
-  if (read.data === null || read.data === undefined) return [];
-  if (!Array.isArray(read.data)) {
-    throw new ConfigError(file, 'expected a list of departments, each with name, keywords and examples');
-  }
-  const items = read.data as unknown[];
+  const doc = readDepartmentsDoc(file, read);
+  warnings.push(...doc.warnings);
   const known = Object.keys(DepartmentSchema.shape);
   const departments: Department[] = [];
-  items.forEach((item, i) => {
+  doc.departments.forEach((item, i) => {
     const parsed = DepartmentSchema.safeParse(item);
     if (!parsed.success) throw new ConfigError(file, `department #${i + 1}: ${formatIssues(parsed.error)}`);
     const obj = item as Record<string, unknown>;
@@ -182,6 +209,42 @@ export function loadDepartments(paths: DataPaths, warnings: string[] = []): Depa
     });
   });
   return departments;
+}
+
+/**
+ * Reads the optional `chats:` list of departments.yaml: per-chat guidance for Claude `{ chat, department?, note? }`.
+ * Entries with neither department nor note are dropped with a warning. Unknown keys produce warnings.
+ * A missing file or section gives [].
+ */
+export function loadChatNotes(paths: DataPaths, warnings: string[] = []): ChatNote[] {
+  const file = paths.departments;
+  const read = readYamlFile(file);
+  if (!read.exists) return [];
+  const doc = readDepartmentsDoc(file, read);
+  warnings.push(...doc.warnings);
+  const known = Object.keys(ChatNoteSchema.shape);
+  const notes: ChatNote[] = [];
+  doc.chats.forEach((item, i) => {
+    const parsed = ChatNoteSchema.safeParse(item);
+    if (!parsed.success) throw new ConfigError(file, `chats #${i + 1}: ${formatIssues(parsed.error)}`);
+    const match = parsed.data.chat.trim();
+    warnings.push(...unknownKeyWarnings(item as Record<string, unknown>, known, file, `chat "${match}": `));
+    const department = parsed.data.department?.trim() || null;
+    const note = parsed.data.note?.trim() || null;
+    if (!department && !note) {
+      warnings.push(`${file}: chat "${match}" has no department or note, ignored`);
+      return;
+    }
+    notes.push({ match, department, note });
+  });
+  return notes;
+}
+
+/** The note for a chat, matched by id or by name (case-insensitive, exact). */
+export function findChatNote(notes: readonly ChatNote[], chat: { id: string; name: string | null }): ChatNote | null {
+  const id = chat.id.toLowerCase();
+  const name = (chat.name ?? '').trim().toLowerCase();
+  return notes.find((n) => n.match.toLowerCase() === id) ?? (name ? notes.find((n) => n.match.toLowerCase() === name) ?? null : null);
 }
 
 /**

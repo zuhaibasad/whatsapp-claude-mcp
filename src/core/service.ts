@@ -69,9 +69,9 @@ export interface SetupOps {
    * session; keepData=false also deletes messages/items/config and the keychain key. Requires a user-proof credential
    * exactly like acceptRisk (panel nonce or browser session) — Claude must not be able to trigger it alone.
    */
-  disconnect?(opts: { keepData: boolean }): Promise<SetupState>; // T20: make required once implemented
+  disconnect(opts: { keepData: boolean }): Promise<SetupState>;
   /** Health check for support: no secrets, no message content. */
-  diagnose?(): Promise<Diagnosis>; // T20: make required once implemented
+  diagnose(): Promise<Diagnosis>;
 }
 
 export type SetupOpName = keyof SetupOps;

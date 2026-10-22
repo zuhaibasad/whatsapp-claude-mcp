@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import { createLogger } from '../core/logger.js';
 import type { DataPaths } from '../core/paths.js';
-import type { CollectorState } from '../core/service.js';
+import type { CollectorState, SetupScreen } from '../core/service.js';
 import { createMasterKeyStore, napiKeyringBackend } from '../crypto/index.js';
 import { DaemonAlreadyRunningError, acquireLock } from '../daemon/lock.js';
 import { createWaClient } from '../daemon/wa/index.js';
@@ -28,7 +28,7 @@ export function resolveHostDeps(paths: DataPaths, over: Partial<HostDeps> = {}):
   return {
     keyring,
     keyStore: over.keyStore ?? ((root) => createMasterKeyStore(root, keyring)),
-    waClientFactory: over.waClientFactory ?? ((a) => createWaClient({ auth: a.auth, logger: a.logger })),
+    waClientFactory: over.waClientFactory ?? ((a) => createWaClient({ auth: a.auth, logger: a.logger, onFrame: a.onFrame })),
     logger: over.logger ?? createLogger({ level: 'info', file: paths.logFile, name: 'wa-bridge-host' }),
     openUrl: over.openUrl ?? defaultOpenUrl,
     lockRetryMs: over.lockRetryMs ?? 30_000,
@@ -37,6 +37,7 @@ export function resolveHostDeps(paths: DataPaths, over: Partial<HostDeps> = {}):
     chooseTimeoutMs: over.chooseTimeoutMs ?? 30 * 60_000,
     linkTimeoutMs: over.linkTimeoutMs ?? 5 * 60_000,
     settle: over.settle ?? {},
+    disconnectTimeoutMs: over.disconnectTimeoutMs ?? 20_000,
     uiHtmlPath: over.uiHtmlPath ?? process.env['WA_BRIDGE_UI_HTML'] ?? null,
     version: over.version ?? HOST_VERSION,
     now: over.now ?? Date.now,
@@ -112,8 +113,10 @@ export function createHost(paths: DataPaths, over: Partial<HostDeps> = {}): Host
     chatRows: wrap((o) => () => o.chatRows()),
     submitSelection: wrap((o) => (ids: string[] | null) => o.submitSelection(ids)),
     waitForSync: wrap((o) => (ms: number) => o.waitForSync(ms)),
-    mintNonce: wrap((o) => () => o.mintNonce()),
-    openSetup: wrap((o) => (screen?: 'auto' | 'chats') => o.openSetup(screen)),
+    disconnect: wrap((o) => (opts: { keepData: boolean; nonce?: string }) => o.disconnect(opts)),
+    diagnose: wrap((o) => () => o.diagnose()),
+    mintNonce: wrap((o) => (kind?: 'accept' | 'disconnect') => o.mintNonce(kind)),
+    openSetup: wrap((o) => (screen?: SetupScreen) => o.openSetup(screen)),
   };
 
   return {

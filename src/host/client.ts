@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import type { ChatRow, KeyringBackend } from '../core/contracts.js';
 import type { DataPaths } from '../core/paths.js';
-import type { CollectorState, HostInfo, SelectionSummary, SetupState } from '../core/service.js';
+import type { CollectorState, Diagnosis, HostInfo, SelectionSummary, SetupState } from '../core/service.js';
 import { napiKeyringBackend } from '../crypto/index.js';
 import { readControlToken } from './auth.js';
 import { HostError, HostUnavailableError, type HostOps } from './types.js';
@@ -70,7 +70,10 @@ export function createHostClient(paths: DataPaths, opts: HostClientOptions = {})
     submitSelection: (selectedIds) => call<SelectionSummary | null>('submit_selection', { selectedIds }),
     waitForSync: (timeoutMs) =>
       call<{ collector: CollectorState; waitedMs: number }>('wait_for_sync', { timeoutMs }, { timeoutMs: timeoutMs + 10_000 }),
-    mintNonce: () => call<{ nonce: string }>('mint-nonce', {}),
+    disconnect: ({ keepData, nonce }) =>
+      call<SetupState>('disconnect', { keepData }, { headers: nonce ? { 'X-Disconnect-Nonce': nonce } : {}, timeoutMs: 120_000 }),
+    diagnose: () => call<Diagnosis>('diagnose', {}),
+    mintNonce: (kind) => call<{ nonce: string }>('mint-nonce', { kind: kind ?? 'accept' }),
     openSetup: (screen) => call<{ opened: true }>('open-setup', { screen: screen ?? 'auto' }),
   };
 }

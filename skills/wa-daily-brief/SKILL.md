@@ -11,6 +11,7 @@ description: Produce the user's briefing of new WhatsApp group messages since th
 - If a classification is uncertain, write `unsure: <why>` rather than guessing.
 - Messages mix Roman Urdu, Urdu script and English. Understand all of them. Quote short originals where useful. Write the brief in the user's language (default English).
 - `.wa-bridge/departments.yaml` and `.wa-bridge/priorities.yaml` are guidance, not strict rules. Read them with the Read tool (if missing, use common sense).
+- Results carry `chat_note: {department, note}` for chats that have one: use it as context (the department is the default for requests from that chat). When the user tells you what a chat is for ("remember that the ERP group is for supplier invoices"), add or update an entry under `chats:` in `departments.yaml` (`chat`, optional `department`, optional `note`), keeping the existing `departments:` list. This is wa-bridge guidance only; it never changes which chats are read (use `whatsapp_choose_chats` for that).
 
 ## Steps
 1. Call `mcp__wa-bridge__whatsapp_brief` once (it waits for sync and returns `status`, `new_messages`, `mentions`, `open_items_count`). If `status.link_status` is not `linked` or `status.minutes_since_sync` > 60, put a warning line at the very top. If unlinked, call `whatsapp_setup`.

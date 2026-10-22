@@ -24,10 +24,12 @@ export const WIRE_NAME: Record<UiOpName | 'acceptRisk', string> = {
   cancelLink: 'cancel_link',
   chatRows: 'chat_rows',
   submitSelection: 'submit_selection',
+  disconnect: 'disconnect',
 };
 
 function argsFor(op: UiOpName, args: unknown[]): Record<string, unknown> {
   if (op === 'submitSelection') return { selectedIds: args[0] ?? null };
+  if (op === 'disconnect') return { keepData: (args[0] as { keepData: boolean } | undefined)?.keepData === true };
   return {};
 }
 
@@ -92,7 +94,9 @@ export function mcpAppHost(): Host {
       return initial;
     },
     async call(op, ...args) {
-      return unwrap(op, await tool(WIRE_NAME[op], argsFor(op, args))) as never;
+      const a = argsFor(op, args);
+      if (op === 'disconnect') a.nonce = window.__WA_DISCONNECT_NONCE__ ?? '';
+      return unwrap(op, await tool(WIRE_NAME[op], a)) as never;
     },
     async acceptRisk() { return (await tool('accept_risk', { nonce: window.__WA_NONCE__ ?? '' })) as SetupState; },
     async notifyDone(summary) {

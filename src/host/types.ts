@@ -1,7 +1,7 @@
 import type { DataPaths } from '../core/paths.js';
 import type { KeyringBackend, MasterKeyStore, WaClient } from '../core/contracts.js';
 import type { Logger } from '../core/logger.js';
-import type { CollectorState, SetupOps } from '../core/service.js';
+import type { CollectorState, SetupOps, SetupScreen } from '../core/service.js';
 import type { SettleOptions } from '../daemon/link.js';
 import type { WaClientFactoryArgs } from '../daemon/runner.js';
 
@@ -14,10 +14,15 @@ export interface HostOps extends SetupOps {
    * Over HTTP from a browser session the nonce is not needed.
    */
   acceptRisk(nonce?: string): ReturnType<SetupOps['acceptRisk']>;
-  /** Mints a single-use panel nonce (10 minute TTL) to embed in the Desktop setup panel. */
-  mintNonce(): Promise<{ nonce: string }>;
+  /**
+   * Disconnects WhatsApp. Needs a valid disconnect nonce (from mintNonce('disconnect')) because only a user action may
+   * do this; over HTTP a browser session needs no nonce. The control token alone is refused (403).
+   */
+  disconnect(opts: { keepData: boolean; nonce?: string }): ReturnType<SetupOps['disconnect']>;
+  /** Mints a single-use panel nonce (10 minute TTL) to embed in the Desktop setup panel. Default kind: 'accept'. */
+  mintNonce(kind?: 'accept' | 'disconnect'): Promise<{ nonce: string }>;
   /** Opens the default browser at the setup page (the one-time URL is never returned). */
-  openSetup(screen?: 'auto' | 'chats'): Promise<{ opened: true }>;
+  openSetup(screen?: SetupScreen): Promise<{ opened: true }>;
 }
 
 export type HostRole = 'holder' | 'follower' | 'stopped';
@@ -51,6 +56,8 @@ export interface HostDeps {
   /** How long a QR session may wait for a scan. Default 5 min. */
   linkTimeoutMs: number;
   settle: Partial<SettleOptions>;
+  /** How long disconnect waits for the WhatsApp connection before wiping locally anyway. Default 20 s. */
+  disconnectTimeoutMs: number;
   /** Setup UI HTML file. Default: dist/ui/setup.html next to the build. */
   uiHtmlPath: string | null;
   version: string;

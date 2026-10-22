@@ -4,11 +4,12 @@ import type { SelectionSummary, SetupOpName, SetupState, SetupStep } from '../sr
 
 export type Tab = 'all' | 'groups' | 'direct' | 'channels';
 export type SortMode = 'recent' | 'unread';
-export type InitialScreen = 'auto' | 'chats';
-export type Screen = 'risk' | 'start' | 'qr' | 'syncing' | 'picker' | 'permissions' | 'done' | 'error';
+export type InitialScreen = 'auto' | 'chats' | 'disconnect';
+export type Screen = 'risk' | 'start' | 'qr' | 'syncing' | 'picker' | 'permissions' | 'done' | 'disconnect' | 'error';
 
 /** Map the host's setup step to the screen to show. `editing` = user clicked "Change chats" from done. */
-export function screenFor(step: SetupStep, editing = false): Screen {
+export function screenFor(step: SetupStep, editing = false, disconnecting = false): Screen {
+  if (disconnecting && (step === 'done' || step === 'choose_chats' || step === 'syncing')) return 'disconnect';
   switch (step) {
     case 'needs_accept': return 'risk';
     case 'ready_to_link': return 'start';
@@ -188,7 +189,7 @@ export function doneSummaryLine(c: SelectionCounts | null): string {
   return `${c.groupsSelected} group${c.groupsSelected === 1 ? '' : 's'} and ${c.directSelected} direct chat${c.directSelected === 1 ? '' : 's'} selected.`;
 }
 
-export type UiOpName = Exclude<SetupOpName, 'waitForSync' | 'acceptRisk' | 'disconnect' | 'diagnose'>; // T20 adds disconnect
+export type UiOpName = Exclude<SetupOpName, 'waitForSync' | 'acceptRisk' | 'diagnose'>;
 
 /** Servers may return the value bare or wrapped (structuredContent must be an object, so arrays are wrapped). */
 export function unwrap(op: UiOpName, payload: unknown): unknown {
@@ -204,14 +205,14 @@ export function unwrap(op: UiOpName, payload: unknown): unknown {
 /** `?screen=chats` in a URL query string. */
 export function screenFromSearch(search: string): InitialScreen | null {
   const v = new URLSearchParams(search).get('screen');
-  return v === 'chats' ? 'chats' : null;
+  return v === 'chats' || v === 'disconnect' ? v : null;
 }
 
 /** Read `initialScreen` from a tool result's structuredContent. */
 export function initialScreenFrom(structured: unknown): InitialScreen | null {
   if (structured && typeof structured === 'object') {
     const v = (structured as Record<string, unknown>).initialScreen;
-    if (v === 'chats' || v === 'auto') return v;
+    if (v === 'chats' || v === 'auto' || v === 'disconnect') return v;
   }
   return null;
 }
@@ -219,6 +220,25 @@ export function initialScreenFrom(structured: unknown): InitialScreen | null {
 /** Open straight to the picker only when asked to AND the account is linked and past syncing. */
 export function opensPicker(initial: InitialScreen | null, step: SetupStep): boolean {
   return initial === 'chats' && (step === 'done' || step === 'choose_chats');
+}
+
+/** Open the disconnect confirmation only when there is something linked to disconnect. */
+export function opensDisconnect(initial: InitialScreen | null, step: SetupStep): boolean {
+  return initial === 'disconnect' && (step === 'done' || step === 'choose_chats' || step === 'syncing');
+}
+
+export type DisconnectChoice = 'keep' | 'delete';
+
+/** The two choices on the confirmation screen; the red button label follows the choice. */
+export const DISCONNECT_OPTIONS: { value: DisconnectChoice; label: string; detail: string; button: string }[] = [
+  { value: 'keep', label: 'Disconnect and keep my chat history on this computer',
+    detail: 'WhatsApp is unlinked. Your saved messages and settings stay here, and you can link again later.', button: 'Disconnect WhatsApp' },
+  { value: 'delete', label: 'Disconnect and delete everything',
+    detail: 'WhatsApp is unlinked and all saved messages, items, settings and the encryption key are erased from this computer. This cannot be undone.', button: 'Disconnect and delete everything' },
+];
+
+export function disconnectKeepData(choice: DisconnectChoice | null): boolean | null {
+  return choice === null ? null : choice === 'keep';
 }
 
 /** The "stop the permission pop-ups" step appears once: on the first save of onboarding (step was choose_chats). */

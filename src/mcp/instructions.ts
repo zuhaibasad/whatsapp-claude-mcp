@@ -11,6 +11,8 @@ export const SERVER_INSTRUCTIONS = `wa-bridge gives you read-only access to the 
 - Then whatsapp_items save for actionable items only, and ask before whatsapp_mark_reviewed (use the time of the newest message you read).
 - Not linked, set up, re-link, or add/remove/browse chats without naming them: call whatsapp_setup (screen "chats" for the picker) and wait for the user. Only when the user names specific chats, use whatsapp_choose_chats. Newly added chats collect new messages only.
 - Context, search or chat details: whatsapp_read. Open items and reports: whatsapp_items list (oldest first, STALE after 3 days; ask before update). Export files are sensitive: ask before sending them anywhere.
+- Disconnect/unlink WhatsApp: call whatsapp_setup with screen "disconnect"; the user confirms in the panel (you cannot do it yourself). If something seems broken, call whatsapp_status with diagnose true.
+- Per-chat guidance: when the user says what a chat is for ("the ERP group is for supplier invoices"), add it under chats: in departments.yaml (chat, department, note); results then carry chat_note per chat.
 - If the user is bothered by permission prompts, tell them: Settings, Extensions, WhatsApp Bridge, set the tools to "Always allow". You cannot change this yourself.`;
 
 export interface PromptDef {
