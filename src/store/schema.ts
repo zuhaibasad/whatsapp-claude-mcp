@@ -129,7 +129,14 @@ CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts (phone_jid);
 CREATE INDEX IF NOT EXISTS idx_contacts_lid ON contacts (lid);
 `;
 
-/** Creates/updates the schema (v1 then v2). Idempotent. */
+/** v2 -> v3: quoted reply copy and location/contact card payload (JSON). */
+const UPGRADE_V3 = `
+ALTER TABLE messages ADD COLUMN quoted_text TEXT;
+ALTER TABLE messages ADD COLUMN quoted_sender_name TEXT;
+ALTER TABLE messages ADD COLUMN extra TEXT;
+`;
+
+/** Creates/updates the schema (v1, v2, v3). Idempotent. */
 export function migrate(db: Db): void {
   db.transaction(() => {
     db.exec(SCHEMA_V1);
@@ -139,6 +146,10 @@ export function migrate(db: Db): void {
     if (cur < 2) {
       db.exec(UPGRADE_V2);
       db.prepare("UPDATE meta SET value = '2' WHERE key = 'schema_version'").run();
+    }
+    if (cur < 3) {
+      db.exec(UPGRADE_V3);
+      db.prepare("UPDATE meta SET value = '3' WHERE key = 'schema_version'").run();
     }
   })();
 }

@@ -2,6 +2,7 @@
 import { proto } from 'baileys';
 import type { WAMessage } from 'baileys';
 import type { RawMessage } from '../../core/contracts.js';
+import type { MessageExtra } from '../../core/types.js';
 
 type Content = proto.IMessage;
 type EditResult = { chatId: string; messageId: string; newText: string };
@@ -81,6 +82,63 @@ function contextInfoOf(c: Content): proto.IContextInfo | null {
   return null;
 }
 
+const QUOTE_MAX = 300;
+
+const clip300 = (t: string): string => {
+  const chars = [...t];
+  return chars.length <= QUOTE_MAX ? t : chars.slice(0, QUOTE_MAX).join('');
+};
+
+/** Text of a quoted message (text/caption, else a `[kind]` placeholder). Null when nothing usable. */
+function quotedTextOf(ci: proto.IContextInfo | null): string | null {
+  const q = ci?.quotedMessage;
+  if (!q) return null;
+  const inner = peel(q, false);
+  if (!inner) return null;
+  const t = textOf(inner);
+  if (t !== null) return clip300(t);
+  const kind = mediaTypeOf(inner);
+  return kind ? `[${kind}]` : null;
+}
+
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Parses FN and TEL lines of a vCard. Pure string handling; untrusted input. */
+export function parseVcard(vcard: string | null | undefined, fallbackName?: string | null): { name: string; phones: string[] } {
+  let fn: string | null = null;
+  const phones: string[] = [];
+  for (const raw of (vcard ?? '').split(/\r?\n/)) {
+    const idx = raw.indexOf(':');
+    if (idx < 0) continue;
+    const key = raw.slice(0, idx).split(';')[0]?.trim().toUpperCase() ?? '';
+    const val = raw.slice(idx + 1).trim();
+    if (!val) continue;
+    if (key === 'FN' && fn === null) fn = val;
+    else if (key === 'TEL' || key.endsWith('.TEL')) phones.push(val);
+  }
+  return { name: clip300(fn ?? fallbackName ?? ''), phones: phones.slice(0, 10).map((p) => p.slice(0, 40)) };
+}
+
+/** Location or contact-card payload plus the placeholder text. Null for other content. */
+function extraOf(c: Content): { extra: MessageExtra; text: string } | null {
+  const loc = c.locationMessage ?? c.liveLocationMessage;
+  if (loc && finite(loc.degreesLatitude) && finite(loc.degreesLongitude)) {
+    const place = c.locationMessage;
+    const name = nonEmpty(place?.name);
+    const address = nonEmpty(place?.address);
+    const location: NonNullable<MessageExtra['location']> = { lat: loc.degreesLatitude, lng: loc.degreesLongitude };
+    if (name) location.name = clip300(name);
+    if (address) location.address = clip300(address);
+    return { extra: { location }, text: '[location]' };
+  }
+  const cards = c.contactsArrayMessage?.contacts ?? (c.contactMessage ? [c.contactMessage] : []);
+  if (cards.length > 0) {
+    const contacts = cards.slice(0, 10).map((k) => parseVcard(k.vcard, k.displayName));
+    return { extra: { contacts }, text: '[contact card]' };
+  }
+  return null;
+}
+
 const isPn = (jid: string | null | undefined): jid is string => !!jid && jid.endsWith('@s.whatsapp.net');
 
 function senderOf(m: WAMessage, meId: string): string {
@@ -133,12 +191,16 @@ export function normalizeMessage(m: WAMessage, meId: string): RawMessage | null 
   if (!content) return null;
   if (content.protocolMessage || content.reactionMessage || content.pollUpdateMessage) return null;
 
-  const text = textOf(content);
+  const card = extraOf(content);
+  const text = textOf(content) ?? card?.text ?? null;
   const mediaType = mediaTypeOf(content);
   if (text === null && mediaType === null) return null;
 
   const ci = contextInfoOf(content);
   return {
+    extra: card?.extra ?? null,
+    quotedText: quotedTextOf(ci),
+    quotedSenderName: null,
     id,
     chatId,
     senderId: senderOf(m, meId),

@@ -25,7 +25,7 @@ describe('store', () => {
   it('migrate is idempotent', () => {
     store.migrate();
     store.migrate();
-    expect(store.getMeta('schema_version')).toBe('2');
+    expect(store.getMeta('schema_version')).toBe('3');
   });
 
   it('dedupes inserts and bumps last_message_at', () => {

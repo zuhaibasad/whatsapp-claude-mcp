@@ -22,7 +22,7 @@ describe('schema v1 -> v2', () => {
     const store = new SqliteStore(db);
     store.migrate();
     store.migrate();
-    expect(store.getMeta('schema_version')).toBe('2');
+    expect(store.getMeta('schema_version')).toBe('3');
     expect(store.getChat(NL)).toMatchObject({ type: 'channel', name: 'Some Channel', included: false });
     expect(store.getChat('1@g.us')).toMatchObject({ type: 'group', name: 'ERP', included: true, lastMessageAt: 500, lastActivityAt: 500, unreadCount: null });
     expect(store.getChat('2@s.whatsapp.net')).toMatchObject({ type: 'direct', included: false, lastActivityAt: 700 });

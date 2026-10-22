@@ -5,9 +5,10 @@ import { loadConfig } from '../config/index.js';
 import { computeRules, currentSelection, writeSelection, type ChatChoice } from '../config/selection.js';
 import type { Config, Store } from '../core/contracts.js';
 import { resolvePaths, type DataPaths } from '../core/paths.js';
-import type { Chat, ItemCategory, StoredMessage } from '../core/types.js';
+import type { Chat, ItemCategory } from '../core/types.js';
 import { isoInZone, itemRow, writeItemsExport, ExportError } from '../export/index.js';
 import type { HostBridge } from './host.js';
+import { Budget, clip, contextBefore, messageJson, withNotice, type Json } from './format.js';
 import { PROMPTS, SERVER_INSTRUCTIONS } from './instructions.js';
 import { registerSetupUi } from './setup-tools.js';
 
@@ -44,18 +45,11 @@ export interface McpDeps {
 
 // Limits. Chosen for Roman Urdu / Urdu / English chats with emoji, where one message is usually short.
 const MAX_LIMIT = 1000;
-const MAX_RESPONSE_TEXT_CHARS = 80_000;
 const DEFAULT_NEW_LIMIT = 300;
 
-type Json = Record<string, unknown>;
+export { clip };
 
 // ---------- helpers ----------
-
-/** Truncates by code point so emoji and Urdu letters are never split. */
-export function clip(text: string, max: number): string {
-  const chars = [...text];
-  return chars.length <= max ? text : chars.slice(0, max).join('') + '… [truncated]';
-}
 
 function metaSeconds(v: string | null): number | null {
   if (!v) return null;
@@ -125,40 +119,6 @@ export function resolveChat(store: Store, ref: string): Chat {
 function resolveChatIds(store: Store, refs: string[] | undefined): string[] | undefined {
   if (!refs || refs.length === 0) return undefined;
   return refs.map((r) => resolveChat(store, r).id);
-}
-
-function senderLabel(m: StoredMessage): string {
-  if (m.isFromMe) return 'me';
-  return m.senderName ?? (m.senderId.split('@')[0] ?? m.senderId);
-}
-
-function messageJson(m: StoredMessage, c: Ctx): Json {
-  return {
-    ref: `${m.chatId}/${m.id}`,
-    ts: isoInZone(m.ts, c.config.timezone),
-    from: senderLabel(m),
-    text: m.deleted ? null : m.text === null ? null : clip(m.text, c.config.maxTextChars),
-    reply_to: m.quotedId ? `${m.chatId}/${m.quotedId}` : null,
-    mentions_me: m.mentionReason !== null,
-    media: m.hasMedia ? (m.mediaType ?? 'media') : null,
-    edited: m.edited,
-    deleted: m.deleted,
-  };
-}
-
-/** Counts characters of text in messages so one response cannot flood the context. */
-class Budget {
-  private used = 0;
-  exhausted = false;
-  take(m: StoredMessage, c: Ctx): boolean {
-    const len = Math.min([...(m.text ?? '')].length, c.config.maxTextChars) + 80;
-    if (this.used + len > MAX_RESPONSE_TEXT_CHARS && this.used > 0) {
-      this.exhausted = true;
-      return false;
-    }
-    this.used += len;
-    return true;
-  }
 }
 
 // ---------- server ----------
@@ -271,6 +231,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       since: optIso.describe('ISO-8601 time, 7d / 12h, or "last_review" (default)'),
       chats: z.array(z.string()).optional().describe('chat ids or names'),
       limit: z.number().int().min(1).optional().describe(`default ${DEFAULT_NEW_LIMIT}, max ${MAX_LIMIT}`),
+      with_context: z.boolean().optional().describe('add up to 3 earlier messages per previously reviewed chat'),
     }),
     { write: false, readOnlyHint: true, hidden: true },
     (a, c, store) => {
@@ -288,11 +249,18 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
             if (messages.length > 0) chats.push({ id: ch.chat.id, name: ch.chat.name, messages });
             break outer;
           }
-          messages.push(messageJson(m, c));
+          messages.push(messageJson(m, c, store));
         }
         chats.push({ id: ch.chat.id, name: ch.chat.name, messages });
       }
-      return { since: since === 'last_review' ? 'last_review' : isoInZone(since, c.config.timezone), truncated, chats };
+      if (a.with_context) {
+        // Context is optional: added only with the budget left after the new messages (dropped first when truncated).
+        for (const ch of chats) {
+          const first = res.chats.find((x) => x.chat.id === ch.id)?.messages[0];
+          if (first) ch.context_before = contextBefore(store, String(ch.id), first.ts, c, budget);
+        }
+      }
+      return withNotice({ since: since === 'last_review' ? 'last_review' : isoInZone(since, c.config.timezone), truncated, chats });
     });
 
   tool('get_messages',
@@ -320,9 +288,9 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
           truncated = true;
           break;
         }
-        messages.push(messageJson(m, c));
+        messages.push(messageJson(m, c, store));
       }
-      return { chat: { id: chat.id, name: chat.name }, truncated, messages };
+      return withNotice({ chat: { id: chat.id, name: chat.name }, truncated, messages });
     });
 
   tool('search_messages',
@@ -347,9 +315,9 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
           truncated = true;
           break;
         }
-        out.push({ chat_name: h.chatName, ...messageJson(h.message, c), snippet: clip(h.snippet, 300) });
+        out.push({ chat_name: h.chatName, ...messageJson(h.message, c, store), snippet: clip(h.snippet, 300) });
       }
-      return { truncated, hits: out };
+      return withNotice({ truncated, hits: out });
     });
 
   tool('get_mentions',
@@ -371,9 +339,9 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
           truncated = true;
           break;
         }
-        mentions.push({ chat_name: store.getChat(m.chatId)?.name ?? null, reason: m.mentionReason, ...messageJson(m, c) });
+        mentions.push({ chat_name: store.getChat(m.chatId)?.name ?? null, reason: m.mentionReason, ...messageJson(m, c, store) });
       }
-      return { truncated, mentions };
+      return withNotice({ truncated, mentions });
     });
 
   tool('get_chat_info',
@@ -637,7 +605,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       let res = await statusRun({});
       if (res.isError) return res;
       let status = parseOut(res);
-      if (notLinked(status)) return text({ status: compact(status), new_messages: { chats: [], truncated: false }, mentions: [], open_items_count: 0 });
+      if (notLinked(status)) return text(withNotice({ status: compact(status), new_messages: { chats: [], truncated: false }, mentions: [], open_items_count: 0 }));
       if (secs > 0) {
         const { warning } = await trySync(secs);
         res = await statusRun({});
@@ -646,7 +614,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
         if (warning) status.warnings = [...((status.warnings as string[] | undefined) ?? []), warning];
       }
       const since = a.since ?? 'last_review';
-      const nm = await inner('get_new_messages', { since, ...pickFrom(a, 'limit') });
+      const nm = await inner('get_new_messages', { since, with_context: true, ...pickFrom(a, 'limit') });
       if (nm.isError) return nm;
       const mn = await inner('get_mentions', { since });
       if (mn.isError) return mn;
@@ -655,13 +623,14 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       for (const ch of (newMessages.chats as { messages: { ref: string }[] }[] | undefined) ?? []) for (const m of ch.messages) present.add(m.ref);
       const all = (parseOut(mn).mentions as { ref: string; reason?: string }[] | undefined) ?? [];
       const counts = (status.counts as { open_items?: number } | undefined) ?? {};
-      return text({
+      delete newMessages.content_notice; // one top-level notice for the whole brief
+      return text(withNotice({
         status: compact(status),
         new_messages: newMessages,
         mentions: all.filter((m) => !present.has(m.ref)),
         mentions_already_in_new_messages: all.filter((m) => present.has(m.ref)).map((m) => ({ ref: m.ref, reason: m.reason })),
         open_items_count: counts.open_items ?? 0,
-      });
+      }));
     });
 
   plain('whatsapp_read',

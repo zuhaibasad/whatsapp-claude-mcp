@@ -4,7 +4,7 @@ import type {
   SearchHit, Store, StoreCounts, ChatSummary,
 } from '../core/contracts.js';
 import type {
-  Account, Chat, ChatType, Contact, Item, ItemInput, ItemStatus, MentionReason, MessageInput,
+  Account, Chat, ChatType, Contact, Item, ItemInput, ItemStatus, MentionReason, MessageExtra, MessageInput,
   Participant, StoredMessage,
 } from '../core/types.js';
 import { migrate } from './schema.js';
@@ -58,6 +58,16 @@ function parseMentions(v: unknown): string[] {
   }
 }
 
+function parseExtra(v: unknown): MessageExtra | null {
+  if (typeof v !== 'string' || v === '') return null;
+  try {
+    const o: unknown = JSON.parse(v);
+    return o && typeof o === 'object' ? (o as MessageExtra) : null;
+  } catch {
+    return null;
+  }
+}
+
 function toMessage(r: Row): StoredMessage {
   return {
     id: String(r.id), chatId: String(r.chat_id), senderId: String(r.sender_id), senderName: s(r.sender_name),
@@ -65,6 +75,7 @@ function toMessage(r: Row): StoredMessage {
     mentions: parseMentions(r.mentions), mentionReason: s(r.mention_reason) as MentionReason | null,
     isFromMe: b(r.is_from_me), hasMedia: b(r.has_media), mediaType: s(r.media_type),
     edited: b(r.edited), deleted: b(r.deleted),
+    quotedText: s(r.quoted_text), quotedSenderName: s(r.quoted_sender_name), extra: parseExtra(r.extra),
   };
 }
 
@@ -77,7 +88,7 @@ function toItem(r: Row): Item {
   };
 }
 
-const MSG_COLS = 'm.id, m.chat_id, m.sender_id, m.sender_name, m.ts, m.text, m.quoted_id, m.quoted_sender_id, m.mentions, m.mention_reason, m.is_from_me, m.has_media, m.media_type, m.edited, m.deleted';
+const MSG_COLS = 'm.id, m.chat_id, m.sender_id, m.sender_name, m.ts, m.text, m.quoted_id, m.quoted_sender_id, m.mentions, m.mention_reason, m.is_from_me, m.has_media, m.media_type, m.edited, m.deleted, m.quoted_text, m.quoted_sender_name, m.extra';
 
 function placeholders(count: number): string {
   return new Array(count).fill('?').join(',');
@@ -284,10 +295,12 @@ export class SqliteStore implements Store {
       this.run('INSERT OR IGNORE INTO chats(id, type, included) VALUES (?, ?, 1)', msg.chatId, chatTypeFromJid(msg.chatId));
       const changes = this.run(
         `INSERT OR IGNORE INTO messages(id, chat_id, sender_id, sender_name, ts, text, quoted_id, quoted_sender_id,
-           mentions, mention_reason, is_from_me, has_media, media_type, edited, deleted)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,0)`,
+           mentions, mention_reason, is_from_me, has_media, media_type, edited, deleted,
+           quoted_text, quoted_sender_name, extra)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,0,?,?,?)`,
         msg.id, msg.chatId, msg.senderId, msg.senderName, msg.ts, msg.text, msg.quotedId, msg.quotedSenderId,
         JSON.stringify(msg.mentions), msg.mentionReason, msg.isFromMe ? 1 : 0, msg.hasMedia ? 1 : 0, msg.mediaType,
+        msg.quotedText ?? null, msg.quotedSenderName ?? null, msg.extra ? JSON.stringify(msg.extra) : null,
       );
       if (changes === 0) return false;
       this.run(`UPDATE chats SET last_message_at = max(coalesce(last_message_at, 0), ?),
@@ -303,12 +316,19 @@ export class SqliteStore implements Store {
   }
 
   markDeleted(chatId: string, messageId: string): boolean {
-    return this.run('UPDATE messages SET deleted = 1, text = NULL WHERE chat_id = ? AND id = ?', chatId, messageId) > 0;
+    return this.run('UPDATE messages SET deleted = 1, text = NULL, quoted_text = NULL, extra = NULL WHERE chat_id = ? AND id = ?', chatId, messageId) > 0;
   }
 
   getMessage(chatId: string, messageId: string): StoredMessage | null {
     const r = this.one(`SELECT ${MSG_COLS} FROM messages m WHERE m.chat_id = ? AND m.id = ?`, chatId, messageId);
     return r ? toMessage(r) : null;
+  }
+
+  getMessagesBefore(chatId: string, beforeTs: number, n: number): StoredMessage[] {
+    const rows = this.all(
+      `SELECT ${MSG_COLS} FROM messages m WHERE m.chat_id = ? AND m.ts < ? AND m.deleted = 0
+       ORDER BY m.ts DESC, m.rowid DESC LIMIT ?`, chatId, beforeTs, n);
+    return rows.map(toMessage).reverse();
   }
 
   getMessages(q: MessageQuery): StoredMessage[] {

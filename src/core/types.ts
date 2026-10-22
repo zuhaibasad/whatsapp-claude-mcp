@@ -53,6 +53,17 @@ export interface MessageInput {
   isFromMe: boolean;
   hasMedia: boolean;
   mediaType: string | null;  // 'image' | 'video' | 'audio' | 'document' | 'sticker' | ...
+  /** Text of the quoted message from contextInfo.quotedMessage (max 300 chars; `[image]` etc. for media). Untrusted data. */
+  quotedText?: string | null;
+  /** Display name of the quoted message's sender when known. */
+  quotedSenderName?: string | null;
+  /** Location / contact card payloads, stored as JSON in messages.extra. Untrusted data. */
+  extra?: MessageExtra | null;
+}
+
+export interface MessageExtra {
+  location?: { lat: number; lng: number; name?: string; address?: string };
+  contacts?: { name: string; phones: string[] }[];
 }
 
 export interface StoredMessage extends MessageInput {
