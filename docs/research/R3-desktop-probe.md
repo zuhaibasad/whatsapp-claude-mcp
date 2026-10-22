@@ -20,3 +20,6 @@ The user installed a throwaway `.mcpb` (no WhatsApp code), ran its two tools, th
 3. **The MCP server also runs on the bundled `node.exe`** (`mcp_config.command`), to avoid depending on Electron-as-node and its `system32` CWD.
 4. **In-chat panels are confirmed in Desktop.** Claude Code gets the browser page that the service serves.
 5. **Still to verify inside Desktop:** that `powershell Register-ScheduledTask` called from the MCP process succeeds. If it does not, the fallback is an HKCU Run key plus a one-time "start service" step through `explorer.exe`.
+
+## Addendum (2026-10-22, after the first real install): MSIX DOES redirect AppData
+The installed 0.1.0 extension wrote its data to `%LOCALAPPDATA%\Packages\Claude_pzs8sxrjxfjjc\LocalCache\Local\wa-bridge`, not `%LOCALAPPDATA%\wa-bridge`. The probe looked fine only because the orchestrator had created the probe folder from outside first: MSIX writes to *existing* real AppData folders in place, but redirects *new* ones into the package. **Fix:** on Windows the data dir is `%USERPROFILE%\.wa-bridge` (outside AppData, not virtualized). On start, 0.1.x data is migrated from `%LOCALAPPDATA%\wa-bridge` as seen from inside Desktop, together with its keychain entry.
