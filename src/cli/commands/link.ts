@@ -12,6 +12,7 @@ export async function linkCommand(opts: { project: string }, io: Io, deps: CliDe
   try {
     const res = await deps.linkAccount({
       projectRoot: paths.projectRoot,
+      onStatus: (msg) => io.out(msg),
       onQr: async (qr) => {
         io.out(await deps.renderQr(qr));
         await deps.writeQrPng(paths.qrPng, qr);

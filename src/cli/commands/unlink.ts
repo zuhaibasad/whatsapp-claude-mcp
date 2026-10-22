@@ -54,7 +54,7 @@ export async function unlinkCommand(opts: UnlinkOpts, io: Io, deps: CliDeps): Pr
     try {
       const auth = await useDbAuthState(db);
       if (auth.hasCreds()) {
-        const client = deps.createClient(auth);
+        const client = deps.createClient(auth, paths.logFile);
         try {
           const opened = waitForOpen(client, deps.unlinkOpenTimeoutMs);
           await client.connect();

@@ -37,6 +37,7 @@ const logger = createLogger({ level: 'silent' });
 const deps = () => ({ keyStore, waClientFactory: () => client, logger });
 const qrPng = (): string => resolvePaths(dir).qrPng;
 const tick = (): Promise<void> => new Promise((r) => setImmediate(r));
+const FAST = { minMs: 0, quietMs: 20, maxMs: 2000 };
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wab-link-'));
@@ -52,7 +53,8 @@ describe('linkAccount', () => {
   it('calls onQr, survives restart_required, resolves on open and records the account', async () => {
     fs.writeFileSync(qrPng(), 'png');
     const qrs: string[] = [];
-    const p = linkAccount({ projectRoot: dir, onQr: (q) => void qrs.push(q), deps: deps() });
+    const status: string[] = [];
+    const p = linkAccount({ projectRoot: dir, onQr: (q) => void qrs.push(q), onStatus: (m) => void status.push(m), settle: FAST, deps: deps() });
     await tick();
     await tick();
     client.conn({ state: 'qr', qr: 'QR1' });
@@ -63,6 +65,7 @@ describe('linkAccount', () => {
     expect(client.connect).toHaveBeenCalledTimes(2);
     client.conn(OPEN);
     await expect(p).resolves.toEqual({ id: '999@s.whatsapp.net', pushName: 'Me' });
+    expect(status.some((m) => /initial sync/.test(m))).toBe(true);
     expect(client.close).toHaveBeenCalled();
     expect(client.unlink).not.toHaveBeenCalled();
     expect(fs.existsSync(qrPng())).toBe(false);
@@ -130,5 +133,37 @@ describe('linkAccount', () => {
     await expect(linkAccount({ projectRoot: dir, onQr: () => undefined, deps: deps() })).rejects.toBeInstanceOf(AlreadyLinkedError);
     expect(client.connect).not.toHaveBeenCalled();
     expect(fs.existsSync(paths.lockFile)).toBe(false);
+  });
+
+  it('stays connected after open and stores the initial sync before closing', async () => {
+    const p = linkAccount({ projectRoot: dir, onQr: () => undefined, settle: { minMs: 0, quietMs: 150, maxMs: 5000 }, deps: deps() });
+    await tick();
+    await tick();
+    client.conn(OPEN);
+    await tick();
+    expect(client.close).not.toHaveBeenCalled(); // not closed right at open
+    client.emit('chats', [{ id: '1203@g.us', type: 'group', name: 'Ops' }]);
+    client.emit('messages', [{
+      id: 'M1', chatId: '1203@g.us', senderId: '111@s.whatsapp.net', senderName: 'Ali', ts: Math.floor(Date.now() / 1000),
+      text: 'server down hai, check karo', quotedId: null, quotedSenderId: null, mentions: [], isFromMe: false,
+      hasMedia: false, mediaType: null,
+    }]);
+    await p;
+    expect(client.close).toHaveBeenCalled();
+    const db = openEncryptedDb(resolvePaths(dir).storeDb, deriveDbKey(MASTER, 'store'));
+    const store = new SqliteStore(db);
+    expect(store.getMessage('1203@g.us', 'M1')?.text).toBe('server down hai, check karo');
+    expect(store.getMeta('last_sync_at')).not.toBeNull();
+    db.close();
+  });
+
+  it('resolves as linked when the connection drops while settling', async () => {
+    const p = linkAccount({ projectRoot: dir, onQr: () => undefined, settle: { minMs: 60000, quietMs: 60000, maxMs: 60000 }, deps: deps() });
+    await tick();
+    await tick();
+    client.conn(OPEN);
+    await tick();
+    client.conn({ state: 'close', reason: 'connection_lost', retry: true });
+    await expect(p).resolves.toMatchObject({ id: '999@s.whatsapp.net' });
   });
 });

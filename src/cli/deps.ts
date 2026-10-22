@@ -10,6 +10,7 @@ import type { DbAuthState } from '../daemon/wa/index.js';
 export interface LinkOptions {
   projectRoot: string;
   onQr(qr: string): Promise<void> | void;
+  onStatus?(msg: string): void;
   timeoutMs?: number;
 }
 export interface DaemonHandle {
@@ -37,7 +38,7 @@ export interface CliDeps {
   /** Sends SIGTERM to a pid. */
   killPid(pid: number): void;
   sleep(ms: number): Promise<void>;
-  createClient(auth: DbAuthState): WaClient;
+  createClient(auth: DbAuthState, logFile?: string): WaClient;
   renderQr(qr: string): Promise<string>;
   writeQrPng(file: string, qr: string): Promise<void>;
   /** How long unlink waits for the socket to open. */
@@ -76,7 +77,7 @@ export function defaultDeps(): CliDeps {
     },
     killPid: (pid) => void process.kill(pid, 'SIGTERM'),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
-    createClient: (auth) => createWaClient({ auth, logger: createLogger({ level: 'warn', name: 'wa-bridge-unlink' }) }),
+    createClient: (auth, logFile) => createWaClient({ auth, logger: createLogger({ level: 'warn', name: 'wa-bridge-unlink', file: logFile }) }),
     renderQr: (qr) => QRCode.toString(qr, { type: 'terminal', small: true }),
     writeQrPng: (file, qr) => QRCode.toFile(file, qr),
     unlinkOpenTimeoutMs: 30_000,
