@@ -1,7 +1,8 @@
 // Shared domain types. All timestamps are unix SECONDS (integers) unless named *Iso.
 // Chat ids and contact ids are WhatsApp JIDs as strings (e.g. "1203...@g.us", "92300...@s.whatsapp.net", "...@lid").
 
-export type ChatType = 'group' | 'direct';
+/** 'channel' = WhatsApp Channels (newsletters, JID suffix @newsletter). */
+export type ChatType = 'group' | 'direct' | 'channel';
 export type LinkStatus = 'unlinked' | 'linking' | 'connecting' | 'linked' | 'disconnected' | 'logged_out';
 
 export interface Account {
@@ -74,5 +75,16 @@ export interface Item extends ItemInput {
   id: number;
   status: ItemStatus;
   createdAt: number;
+  updatedAt: number;
+}
+
+/** Contact metadata (no message content). Persisted so names survive restarts. */
+export interface Contact {
+  id: string;                 // primary JID as WhatsApp gives it (@s.whatsapp.net or @lid)
+  phoneJid: string | null;    // phone-number JID if known (from LID mapping)
+  lid: string | null;         // LID JID if known
+  savedName: string | null;   // name from the user's address book (app-state sync)
+  pushName: string | null;    // name the contact set for themselves
+  verifiedName: string | null;// business verified name
   updatedAt: number;
 }

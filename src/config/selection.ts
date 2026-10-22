@@ -65,8 +65,8 @@ export function buildChatRows(store: Pick<Store, 'listChats'>, config: Config): 
   const selected = currentSelection(config, chats);
   return chats
     .map((c): ChatRow => ({
-      id: c.id, name: c.name, type: c.type, participantCount: c.participantCount,
-      lastMessageAt: c.lastMessageAt, preselected: selected.has(c.id),
+      id: c.id, name: c.name, type: c.type, phone: null, participantCount: c.participantCount,
+      lastMessageAt: c.lastMessageAt, unreadCount: null, preselected: selected.has(c.id),
     }))
     .sort((a, b) => (b.lastMessageAt ?? -1) - (a.lastMessageAt ?? -1) || a.id.localeCompare(b.id));
 }

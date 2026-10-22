@@ -36,6 +36,7 @@ export interface Config {
   timezone: string;               // IANA, default = system zone
   includeGroups: boolean;         // default true
   includeDirectChats: boolean;    // default false
+  includeChannels: boolean;       // default false
   allowlist: string[];            // chat JIDs or chat names (case-insensitive exact)
   denylist: string[];             // same; denylist wins over allowlist
   myNames: string[];              // names/nicknames for text mention detection
@@ -205,9 +206,15 @@ export interface WaClient {
 /** One row in the chat picker. Shared by the daemon (link) and the CLI picker. */
 export interface ChatRow {
   id: string;
+  /** Best display name: chat name, else saved contact name, else push name, else null (UI shows phone). */
   name: string | null;
   type: ChatType;
+  /** "+923001234567" when known (also for @lid chats via the LID mapping), else null. Used for display + search. */
+  phone: string | null;
   participantCount: number | null;
+  /** Last activity in the chat (unix seconds), known even for excluded chats (timestamp only, no content). */
   lastMessageAt: number | null;
+  /** WhatsApp's unread count for the chat when known. */
+  unreadCount: number | null;
   preselected: boolean;
 }

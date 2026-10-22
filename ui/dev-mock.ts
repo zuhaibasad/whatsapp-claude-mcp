@@ -20,7 +20,7 @@ function makeRows(n: number): ChatRow[] {
     else name = i % 7 === 0 ? null : `Contact ${i} ${EMOJI[(i + 2) % EMOJI.length]}`;
     rows.push({
       id: group ? `1203630${i}@g.us` : `92300${String(1000000 + i)}@s.whatsapp.net`,
-      name, type: group ? 'group' : 'direct',
+      name, type: group ? 'group' : 'direct', phone: group ? null : `+92300${String(1000000 + i)}`, unreadCount: i % 4 === 0 ? i % 9 : 0,
       participantCount: group ? 3 + (i % 40) : null,
       lastMessageAt: i % 50 === 49 ? null : now - i * 5400,
       preselected: group && i % 12 === 0,

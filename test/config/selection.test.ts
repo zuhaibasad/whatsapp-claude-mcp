@@ -21,7 +21,7 @@ function rng(seed: number): () => number {
 }
 
 const baseCfg: Config = {
-  retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false,
+  retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false, includeChannels: false,
   allowlist: [], denylist: [], myNames: [], maxTextChars: 2000, logLevel: 'info',
 };
 

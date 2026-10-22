@@ -6,7 +6,7 @@ import {
 } from '../../ui/logic.js';
 
 const row = (id: string, name: string | null, type: 'group' | 'direct', pre = false): ChatRow =>
-  ({ id, name, type, participantCount: null, lastMessageAt: null, preselected: pre });
+  ({ id, name, type, phone: null, participantCount: null, lastMessageAt: null, unreadCount: null, preselected: pre });
 
 const rows: ChatRow[] = [
   row('1@g.us', 'Family 🏡', 'group', true),

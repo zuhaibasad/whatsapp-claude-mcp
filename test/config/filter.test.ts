@@ -8,6 +8,7 @@ function cfg(over: Partial<Config> = {}): Config {
     timezone: 'UTC',
     includeGroups: true,
     includeDirectChats: false,
+    includeChannels: false,
     allowlist: [],
     denylist: [],
     myNames: [],

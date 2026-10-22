@@ -140,6 +140,7 @@ export function loadConfig(paths: DataPaths): { config: Config; warnings: string
     timezone: resolveTimezone(d.timezone, file, warnings),
     includeGroups: d.include_groups ?? true,
     includeDirectChats: d.include_direct_chats ?? false,
+    includeChannels: false, // T15 adds the include_channels key
     allowlist: cleanList(d.allowlist),
     denylist: cleanList(d.denylist),
     myNames: cleanList(d.my_names),
