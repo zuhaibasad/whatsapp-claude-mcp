@@ -17,8 +17,8 @@ wa-bridge gives Claude **read-only** access to the user's own WhatsApp chats.
 ## In flight when the session ended (git worktrees under `.claude/worktrees/`)
 | Task | Spec | Branch | Status |
 |---|---|---|---|
-| T18 content/context (untrusted-content notice, quoted replies, context_before, location/vCard; schema v3) | `docs/tasks/T18-content-context.md` | `worktree-agent-a124853dd95d26801` | Hit the API session limit mid-task, resumed; may be unfinished. |
-| T19 connection health (sleep/resume, app stall, health meta, proxy) | `docs/tasks/T19-connection-health.md` | `worktree-agent-aa784224c2d1c29e4` | Same. Its API is posted on `.agents/BOARD.md`. |
+| T18 content/context | `docs/tasks/T18-content-context.md` | merged | **Merged** (schema v3). |
+| T19 connection health + proxy | `docs/tasks/T19-connection-health.md` | merged | **Merged**. T20 must pass `onFrame` in the host default factory. |
 | T20 lifecycle (Disconnect in panel with user proof, chat notes, diagnose / `wa-bridge doctor`, backups before migrations) | `docs/tasks/T20-lifecycle-ops.md` | `worktree-agent-a48482ff6c0d18f69` | Same. |
 | T21 README rewrite (visual, short, SEO) + licence options | in the agent prompt; outputs `README.md`, `docs/assets/**`, `docs/GITHUB_SEO.md`, `docs/LICENSE_OPTIONS.md` | `worktree-agent-a77916063915c271c` | Started at session end. |
 
