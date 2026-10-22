@@ -1,4 +1,4 @@
-// open_setup, the ui:// setup panel resource, and the app-only tools the panel calls.
+// whatsapp_setup, the ui:// setup panel resource, and the app-only tools the panel calls.
 // App-only tools are registered only when the client advertises MCP Apps support (io.modelcontextprotocol/ui),
 // because clients without it (Claude Code) ignore `visibility` and would show them to the model.
 import fs from 'node:fs';
@@ -21,7 +21,7 @@ type PlainFn = (
   name: string,
   description: string,
   schema: z.ZodObject<z.ZodRawShape>,
-  annotations: { readOnlyHint: boolean },
+  annotations: { readOnlyHint: boolean; hidden?: boolean },
   fn: (args: Record<string, unknown>) => Promise<ToolResult>,
   meta?: Record<string, unknown>,
 ) => void;
@@ -73,16 +73,20 @@ export function registerSetupUi(ctx: SetupUiCtx): void {
       };
     });
 
-  plain('open_setup',
-    'Open the WhatsApp setup panel (link account, choose chats). Use when the user wants to set up, re-link or change which chats wa-bridge reads.',
-    z.object({}),
+  plain('whatsapp_setup',
+    'Open the WhatsApp panel to link an account or choose chats. Use it to set up or re-link, and with screen "chats" whenever the user wants to add, remove or browse chats without naming them.',
+    z.object({ screen: z.enum(['auto', 'chats']).optional().describe('"chats" opens the chat picker (when linked); default "auto"') }),
     { readOnlyHint: false },
-    async () => {
+    async (a) => {
+      const screen: 'auto' | 'chats' = a.screen === 'chats' ? 'chats' : 'auto';
       if (uiOn()) {
-        return text({ shown: true, message: 'The setup panel is shown to the user. Wait for them to finish there; do not ask for any codes. Afterwards call get_status.' });
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ shown: true, message: 'The panel is shown to the user. Wait for them to finish there; do not ask for any codes. Afterwards call whatsapp_status.' }) }],
+          structuredContent: { initialScreen: screen },
+        };
       }
-      await (await needHost()).openSetup();
-      return text({ opened_in_browser: true, message: 'I opened the setup page in your browser. Finish the steps there, then tell me and I will check with get_status.' });
+      await (await needHost()).openSetup(screen);
+      return text({ opened_in_browser: true, message: 'I opened the setup page in your browser. Finish the steps there, then tell me and I will check with whatsapp_status.' });
     },
     { ui: { resourceUri: SETUP_URI } });
 

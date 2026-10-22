@@ -237,6 +237,17 @@ describe('control server auth', () => {
     expect(logLines.join('')).not.toContain(nonce);
   });
 
+  it('open-setup with screen chats keeps screen=chats through the redirect', async () => {
+    const { port } = await holder();
+    const r = await req(port, 'POST', '/api/open-setup', bearer(), { screen: 'chats' });
+    expect(r.status).toBe(200);
+    const url = new URL(opened[opened.length - 1] as string);
+    expect(url.searchParams.get('screen')).toBe('chats');
+    const hit = await req(port, 'GET', `/setup?t=${url.searchParams.get('t')}&screen=chats`);
+    expect(hit.status).toBe(302);
+    expect(hit.headers.location).toBe('/setup?screen=chats');
+  });
+
   it('open-setup hides the token; browser token works once; session can accept risk', async () => {
     const { port } = await holder();
     const r = await req(port, 'POST', '/api/open-setup', bearer(), {});

@@ -117,7 +117,7 @@ export async function startControlServer(
           if (!core.browserTokens.consume(t)) return deny(res, 403, 'bad browser token');
           const { id } = sessions.create();
           res.writeHead(302, {
-            Location: '/setup',
+            Location: url.searchParams.get('screen') === 'chats' ? '/setup?screen=chats' : '/setup',
             'Set-Cookie': `${cookieName()}=${id}; HttpOnly; SameSite=Strict; Path=/`,
             'Cache-Control': 'no-store',
           });
@@ -189,7 +189,7 @@ export async function startControlServer(
           return send(res, 200, await core.mintNonce());
         case 'open-setup':
           if (!isControl) return deny(res, 403, 'control token required');
-          return send(res, 200, await core.openSetup());
+          return send(res, 200, await core.openSetup(body.screen === 'chats' ? 'chats' : 'auto'));
         default:
           return send(res, 404, { error: 'not found' });
       }

@@ -117,7 +117,7 @@ export function resolveChat(store: Store, ref: string): Chat {
   if (exact.length === 1) return exact[0] as Chat;
   const pool = exact.length > 1 ? exact : all.filter((c) => (c.name ?? '').toLowerCase().includes(needle));
   if (pool.length === 1) return pool[0] as Chat;
-  if (pool.length === 0) throw new ToolError(`no chat matches "${ref}": call list_chats to see names and ids`);
+  if (pool.length === 0) throw new ToolError(`no chat matches "${ref}": use whatsapp_read action "chats" to see names and ids`);
   const sample = pool.slice(0, 5).map((c) => `${c.name ?? '(no name)'} [${c.id}]`).join('; ');
   throw new ToolError(`"${ref}" matches ${pool.length} chats (${sample}${pool.length > 5 ? '; …' : ''}): use the chat id`);
 }
@@ -195,7 +195,7 @@ const OWN_RECORDS_NOTE = 'Changes only wa-bridge\'s own records, never WhatsApp.
 export function createServer(deps: McpDeps, options: ServerOptions = {}): CreatedServer {
   const paths = deps.paths ?? resolvePaths(deps.projectRoot);
   const server = new McpServer(
-    { name: 'wa-bridge', version: '0.1.0' },
+    { name: 'wa-bridge', version: '0.2.0' },
     { capabilities: { tools: { listChanged: true }, resources: {}, prompts: {} }, instructions: SERVER_INSTRUCTIONS },
   );
   const handlers = new Map<string, ToolHandler>();
@@ -204,7 +204,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     name: string,
     description: string,
     schema: S,
-    opts: { write: boolean; readOnlyHint: boolean },
+    opts: { write: boolean; readOnlyHint: boolean; hidden?: boolean },
     fn: (args: z.infer<S>, c: Ctx, store: Store) => Json,
   ): void {
     const run: ToolHandler = async (raw) => {
@@ -232,6 +232,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       }
     };
     handlers.set(name, run);
+    if (opts.hidden) return; // internal building block of a model-visible tool
     server.registerTool(
       name,
       { description, inputSchema: schema as z.ZodObject<z.ZodRawShape>, annotations: { readOnlyHint: opts.readOnlyHint, openWorldHint: false } },
@@ -247,7 +248,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       filter: z.enum(['groups', 'direct', 'all']).optional().describe('default "groups"'),
       only_active_since: optIso.describe('ISO-8601 time or 7d / 12h; hides quieter chats'),
     }),
-    { write: false, readOnlyHint: true },
+    { write: false, readOnlyHint: true, hidden: true },
     (a, c, store) => {
       const filter = a.filter ?? 'groups';
       const chats = store.listChats({
@@ -271,7 +272,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       chats: z.array(z.string()).optional().describe('chat ids or names'),
       limit: z.number().int().min(1).optional().describe(`default ${DEFAULT_NEW_LIMIT}, max ${MAX_LIMIT}`),
     }),
-    { write: false, readOnlyHint: true },
+    { write: false, readOnlyHint: true, hidden: true },
     (a, c, store) => {
       const since: number | 'last_review' = !a.since || a.since === 'last_review' ? 'last_review' : parseTime(a.since, c.nowSec, 'since');
       const limit = clampLimit(a.limit, DEFAULT_NEW_LIMIT);
@@ -301,7 +302,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       since: optIso, until: optIso,
       limit: z.number().int().min(1).optional().describe(`default 100, max ${MAX_LIMIT}`),
     }),
-    { write: false, readOnlyHint: true },
+    { write: false, readOnlyHint: true, hidden: true },
     (a, c, store) => {
       const chat = resolveChat(store, a.chat);
       if (!chat.included) throw new ToolError(`chat "${chat.name ?? chat.id}" is excluded by your filter settings`);
@@ -330,7 +331,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       query: z.string().min(1), chats: z.array(z.string()).optional(), since: optIso,
       limit: z.number().int().min(1).optional().describe(`default 50, max ${MAX_LIMIT}`),
     }),
-    { write: false, readOnlyHint: true },
+    { write: false, readOnlyHint: true, hidden: true },
     (a, c, store) => {
       const limit = clampLimit(a.limit, 50);
       const hits = store.searchMessages(a.query, {
@@ -357,7 +358,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       since: optIso.describe('ISO-8601 time, 7d / 12h, or "last_review" (default)'),
       limit: z.number().int().min(1).optional().describe(`default 100, max ${MAX_LIMIT}`),
     }),
-    { write: false, readOnlyHint: true },
+    { write: false, readOnlyHint: true, hidden: true },
     (a, c, store) => {
       const since: number | 'last_review' = !a.since || a.since === 'last_review' ? 'last_review' : parseTime(a.since, c.nowSec, 'since');
       const limit = clampLimit(a.limit, 100);
@@ -378,7 +379,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
   tool('get_chat_info',
     `Get one chat's details and participant list (id or name). Use to learn who is in a group. ${READ_ONLY_NOTE}`,
     z.object({ chat: z.string().describe('chat id or name') }),
-    { write: false, readOnlyHint: true },
+    { write: false, readOnlyHint: true, hidden: true },
     (a, _c, store) => {
       const chat = resolveChat(store, a.chat);
       return {
@@ -417,7 +418,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
         if (link === 'logged_out' || collector === 'logged_out') warnings.push('WhatsApp logged this device out. Say: "set up WhatsApp" to link it again.');
         else if (link === 'unlinked') warnings.push('No WhatsApp account is linked. Say: "set up WhatsApp" (I will open the setup panel).');
         if (!running && link !== 'unlinked') warnings.push('The collector is not running (it runs while Claude is open); data may be old. It starts when Claude starts the wa-bridge connector.');
-        else if (running && link !== 'unlinked' && collector !== 'live') warnings.push(`The collector is ${collector}: recent messages may still be arriving. Call wait_for_sync before a brief.`);
+        else if (running && link !== 'unlinked' && collector !== 'live') warnings.push(`The collector is ${collector}: recent messages may still be arriving. Call whatsapp_status with wait_for_sync_seconds before a brief.`);
         if (running && lastSync !== null && (c.nowSec - lastSync) / 60 > 60) warnings.push('no sync for more than 60 minutes');
         const iso = (t: number | null | undefined): string | null => (t ? isoInZone(t, c.config.timezone) : null);
         return text({
@@ -440,16 +441,11 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     }
   };
   handlers.set('get_status', statusRun);
-  server.registerTool('get_status', {
-    description: 'Check whether the bridge is linked, the daemon is running, how fresh the data is, and any warnings. Call first if results look stale or empty. Local check only; never contacts WhatsApp.',
-    inputSchema: z.object({}),
-    annotations: { readOnlyHint: true, openWorldHint: false },
-  }, async () => (await statusRun({})) as CallToolResult);
 
-  tool('mark_reviewed',
-    `Mark messages up to "until" as reviewed, so get_new_messages stops returning them. Pass "chats" to limit it, otherwise all included chats. ${OWN_RECORDS_NOTE}`,
+  tool('whatsapp_mark_reviewed',
+    `Mark messages up to "until" (ISO time; use the newest message you read) as reviewed so the next brief skips them. Optional "chats" (ids or names) limits it. ${OWN_RECORDS_NOTE}`,
     z.object({ chats: z.array(z.string()).optional(), until: z.string().describe('ISO-8601 time') }),
-    { write: true, readOnlyHint: false },
+    { write: true, readOnlyHint: false,  },
     (a, c, store) => {
       const until = parseTime(a.until, c.nowSec, 'until');
       return { updated: store.setReviewed(resolveChatIds(store, a.chats), until) };
@@ -468,7 +464,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
         summary: z.string().min(1).max(2000), requester: z.string().optional(),
       })).min(1).max(200),
     }),
-    { write: true, readOnlyHint: false },
+    { write: true, readOnlyHint: false, hidden: true },
     (a, _c, store) => {
       const checked = a.items.map((it) => {
         const { chatId, messageId } = splitRef(it.ref);
@@ -489,7 +485,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       status: itemStatus.optional(), department: z.string().optional(), priority: priority.optional(),
       limit: z.number().int().min(1).optional().describe(`default 100, max ${MAX_LIMIT}`),
     }),
-    { write: false, readOnlyHint: true },
+    { write: false, readOnlyHint: true, hidden: true },
     (a, c, store) => {
       const items = store.listItems({ status: a.status, department: a.department, priority: a.priority, limit: clampLimit(a.limit, 100) });
       return { items: items.map((i) => itemRow(i, c.nowSec, c.config.timezone)) };
@@ -498,10 +494,10 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
   tool('update_item',
     `Set an item's status to open, done or dismissed by its numeric id. ${OWN_RECORDS_NOTE}`,
     z.object({ id: z.number().int(), status: itemStatus }),
-    { write: true, readOnlyHint: false },
+    { write: true, readOnlyHint: false, hidden: true },
     (a, _c, store) => {
       const it = store.updateItem(a.id, a.status);
-      if (!it) throw new ToolError(`no item with id ${a.id}: call list_items`);
+      if (!it) throw new ToolError(`no item with id ${a.id}: use whatsapp_items action "list"`);
       return { id: it.id, status: it.status };
     });
 
@@ -511,7 +507,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       format: z.enum(['csv', 'json']), path: z.string().optional().describe('relative to the project folder'),
       status: itemStatus.optional().describe('default "open"'),
     }),
-    { write: false, readOnlyHint: false },
+    { write: false, readOnlyHint: false, hidden: true },
     (a, c, store) => {
       const items = store.listItems({ status: a.status ?? 'open' });
       return { ...writeItemsExport({ paths, items, format: a.format, path: a.path, nowMs: deps.now(), timezone: c.config.timezone }) };
@@ -523,7 +519,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     name: string,
     description: string,
     schema: z.ZodObject<z.ZodRawShape>,
-    annotations: { readOnlyHint: boolean },
+    annotations: { readOnlyHint: boolean; hidden?: boolean },
     fn: (args: Record<string, unknown>) => Promise<ToolResult>,
     meta?: Record<string, unknown>,
   ): void => {
@@ -538,7 +534,8 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       }
     };
     handlers.set(name, run);
-    const config = { description, inputSchema: schema, annotations: { ...annotations, openWorldHint: false } };
+    if (annotations.hidden) return;
+    const config = { description, inputSchema: schema, annotations: { readOnlyHint: annotations.readOnlyHint, openWorldHint: false } };
     if (meta) registerAppTool(server, name, { ...config, _meta: meta }, async (args: unknown) => (await run(args as Record<string, unknown>)) as CallToolResult);
     else server.registerTool(name, config, async (args) => (await run(args as Record<string, unknown>)) as CallToolResult);
   };
@@ -558,9 +555,9 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
   };
 
   plain('wait_for_sync',
-    'Wait until the collector has caught up with WhatsApp (messages received while the computer was off). Call before a brief so the data is fresh. Returns the collector state; "live" means up to date. Never contacts WhatsApp itself.',
-    z.object({ timeout_seconds: z.number().int().min(1).max(300).optional().describe('default 60, max 300') }),
-    { readOnlyHint: true },
+    'Wait until the collector has caught up with WhatsApp.',
+    z.object({ timeout_seconds: z.number().int().min(1).max(300).optional() }),
+    { readOnlyHint: true, hidden: true },
     async (a) => {
       const secs = typeof a.timeout_seconds === 'number' ? a.timeout_seconds : 60;
       const r = await (await needHost()).ops().waitForSync(secs * 1000);
@@ -570,11 +567,177 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       });
     });
 
-  tool('set_chat_inclusion',
-    'Choose which chats wa-bridge reads, by name or id: "include" turns chats on, "exclude" turns them off. A chat turned on only collects new messages from then on (history is not downloaded again). Changes only wa-bridge settings, never WhatsApp.',
+  // ---------- the model-visible tools that group the handlers above ----------
+
+  const parseOut = (r: ToolResult): Json => {
+    try {
+      return JSON.parse(r.content[0]?.text ?? '{}') as Json;
+    } catch {
+      return {};
+    }
+  };
+  const inner = async (name: string, args: Record<string, unknown>): Promise<ToolResult> => {
+    const h = handlers.get(name);
+    if (!h) throw new ToolError(`internal error: no handler ${name}`);
+    return h(args);
+  };
+  const compact = (o: Json): Json => {
+    const keep: Json = {};
+    for (const k of ['account', 'link_status', 'collector', 'minutes_since_sync', 'warnings']) keep[k] = o[k];
+    return keep;
+  };
+  /** Waits for the collector to go live. Returns null (and a reason) when the host is not available. */
+  const trySync = async (secs: number): Promise<{ sync: Json | null; warning?: string }> => {
+    try {
+      const r = await (await needHost(5_000)).ops().waitForSync(secs * 1000);
+      return { sync: { collector: r.collector, ready: r.collector === 'live', waited_seconds: Math.round(r.waitedMs / 1000) } };
+    } catch {
+      return { sync: null, warning: 'could not wait for the collector (it is still starting or not running); data may be incomplete' };
+    }
+  };
+  const notLinked = (s: Json): boolean => s.link_status === undefined || s.link_status === 'unlinked' || s.link_status === 'logged_out';
+  const pickFrom = (a: Record<string, unknown>, ...keys: string[]): Record<string, unknown> => {
+    const o: Record<string, unknown> = {};
+    for (const k of keys) if (a[k] !== undefined) o[k] = a[k];
+    return o;
+  };
+
+  plain('whatsapp_status',
+    'Check whether WhatsApp is linked, whether the collector is up to date, and any warnings. Optionally waits for the collector to catch up first. Local check only.',
+    z.object({ wait_for_sync_seconds: z.number().int().min(0).max(120).optional().describe('default 0') }),
+    { readOnlyHint: true },
+    async (a) => {
+      const secs = typeof a.wait_for_sync_seconds === 'number' ? a.wait_for_sync_seconds : 0;
+      let res = await statusRun({});
+      if (res.isError) return res;
+      let out = parseOut(res);
+      let sync: Json | null = null;
+      let warning: string | undefined;
+      if (secs > 0 && !notLinked(out)) {
+        ({ sync, warning } = await trySync(secs));
+        res = await statusRun({});
+        if (res.isError) return res;
+        out = parseOut(res);
+      }
+      if (sync) out.sync = sync;
+      if (warning) out.warnings = [...((out.warnings as string[] | undefined) ?? []), warning];
+      return text(out);
+    });
+
+  plain('whatsapp_brief',
+    'Use for any brief, summary, "what\'s new" or "what needs my attention" request. One call: waits for sync, then returns status, new messages since the last review, mentions and the open-item count. Local data only.',
     z.object({
-      include: z.array(z.string()).optional().describe('chat names or ids to start reading'),
-      exclude: z.array(z.string()).optional().describe('chat names or ids to stop reading'),
+      since: z.string().optional().describe('"last_review" (default), ISO-8601 time, or 7d / 12h'),
+      limit: z.number().int().min(1).optional().describe(`max messages, default ${DEFAULT_NEW_LIMIT}`),
+      wait_for_sync_seconds: z.number().int().min(0).max(120).optional().describe('default 45'),
+    }),
+    { readOnlyHint: true },
+    async (a) => {
+      const secs = typeof a.wait_for_sync_seconds === 'number' ? a.wait_for_sync_seconds : 45;
+      let res = await statusRun({});
+      if (res.isError) return res;
+      let status = parseOut(res);
+      if (notLinked(status)) return text({ status: compact(status), new_messages: { chats: [], truncated: false }, mentions: [], open_items_count: 0 });
+      if (secs > 0) {
+        const { warning } = await trySync(secs);
+        res = await statusRun({});
+        if (res.isError) return res;
+        status = parseOut(res);
+        if (warning) status.warnings = [...((status.warnings as string[] | undefined) ?? []), warning];
+      }
+      const since = a.since ?? 'last_review';
+      const nm = await inner('get_new_messages', { since, ...pickFrom(a, 'limit') });
+      if (nm.isError) return nm;
+      const mn = await inner('get_mentions', { since });
+      if (mn.isError) return mn;
+      const newMessages = parseOut(nm);
+      const present = new Set<string>();
+      for (const ch of (newMessages.chats as { messages: { ref: string }[] }[] | undefined) ?? []) for (const m of ch.messages) present.add(m.ref);
+      const all = (parseOut(mn).mentions as { ref: string; reason?: string }[] | undefined) ?? [];
+      const counts = (status.counts as { open_items?: number } | undefined) ?? {};
+      return text({
+        status: compact(status),
+        new_messages: newMessages,
+        mentions: all.filter((m) => !present.has(m.ref)),
+        mentions_already_in_new_messages: all.filter((m) => present.has(m.ref)).map((m) => ({ ref: m.ref, reason: m.reason })),
+        open_items_count: counts.open_items ?? 0,
+      });
+    });
+
+  plain('whatsapp_read',
+    'Read stored WhatsApp data. action: "chats" (list chats with unreviewed counts), "messages" (one chat; needs chat), "search" (needs query; optional chat), "chat_info" (participants; needs chat). Local data only.',
+    z.object({
+      action: z.enum(['chats', 'messages', 'search', 'chat_info']),
+      chat: z.string().optional().describe('chat id or name'),
+      query: z.string().optional(),
+      since: z.string().optional().describe('ISO-8601 time or 7d / 12h'),
+      until: z.string().optional(),
+      limit: z.number().int().min(1).optional().describe(`max ${MAX_LIMIT}`),
+      filter: z.enum(['groups', 'direct', 'all']).optional().describe('chats only, default groups'),
+    }),
+    { readOnlyHint: true },
+    async (a) => {
+      const act = String(a.action);
+      const need = (cond: unknown, what: string): void => {
+        if (!cond) throw new ToolError(`whatsapp_read action "${act}" needs ${what}`);
+      };
+      switch (act) {
+        case 'chats':
+          return inner('list_chats', { ...pickFrom(a, 'filter'), ...(a.since !== undefined ? { only_active_since: a.since } : {}) });
+        case 'messages':
+          need(a.chat, '"chat"');
+          return inner('get_messages', pickFrom(a, 'chat', 'since', 'until', 'limit'));
+        case 'search':
+          need(a.query, '"query"');
+          return inner('search_messages', { ...pickFrom(a, 'query', 'since', 'limit'), ...(a.chat ? { chats: [a.chat] } : {}) });
+        default:
+          need(a.chat, '"chat"');
+          return inner('get_chat_info', pickFrom(a, 'chat'));
+      }
+    });
+
+  plain('whatsapp_items',
+    'Follow-up items kept by wa-bridge. action: "save" (needs items), "list", "update" (needs id and status), "export" (needs format csv|json). Changes only wa-bridge\'s own records, never WhatsApp.',
+    z.object({
+      action: z.enum(['save', 'list', 'update', 'export']),
+      items: z.array(z.object({
+        ref: z.string().describe('chat_id/message_id'), category: z.enum(['critical', 'mention', 'request', 'fyi']),
+        department: z.string().optional(), priority: z.enum(['critical', 'high', 'normal', 'low']),
+        summary: z.string().min(1).max(2000), requester: z.string().optional(),
+      })).min(1).max(200).optional(),
+      id: z.number().int().optional(),
+      status: z.enum(['open', 'done', 'dismissed']).optional(),
+      department: z.string().optional(),
+      priority: z.enum(['critical', 'high', 'normal', 'low']).optional(),
+      format: z.enum(['csv', 'json']).optional(),
+      path: z.string().optional().describe('export path inside the project folder'),
+    }),
+    { readOnlyHint: false },
+    async (a) => {
+      const act = String(a.action);
+      const need = (cond: unknown, what: string): void => {
+        if (!cond) throw new ToolError(`whatsapp_items action "${act}" needs ${what}`);
+      };
+      switch (act) {
+        case 'save':
+          need(a.items, '"items"');
+          return inner('save_items', pickFrom(a, 'items'));
+        case 'list':
+          return inner('list_items', pickFrom(a, 'status', 'department', 'priority'));
+        case 'update':
+          need(a.id !== undefined && a.status, '"id" and "status"');
+          return inner('update_item', pickFrom(a, 'id', 'status'));
+        default:
+          need(a.format, '"format" (csv or json)');
+          return inner('export_items', pickFrom(a, 'format', 'path', 'status'));
+      }
+    });
+
+  tool('whatsapp_choose_chats',
+    'Only when the user names specific chats to add or remove. If they want to add or remove chats without naming them, or to browse, call whatsapp_setup with screen "chats" instead. Newly added chats collect new messages only. Changes only wa-bridge settings, never WhatsApp.',
+    z.object({
+      include: z.array(z.string()).optional().describe('chat names or ids to add'),
+      exclude: z.array(z.string()).optional().describe('chat names or ids to remove'),
     }),
     { write: false, readOnlyHint: false },
     (a, c, store) => {

@@ -17,7 +17,7 @@ export interface HostOps extends SetupOps {
   /** Mints a single-use panel nonce (10 minute TTL) to embed in the Desktop setup panel. */
   mintNonce(): Promise<{ nonce: string }>;
   /** Opens the default browser at the setup page (the one-time URL is never returned). */
-  openSetup(): Promise<{ opened: true }>;
+  openSetup(screen?: 'auto' | 'chats'): Promise<{ opened: true }>;
 }
 
 export type HostRole = 'holder' | 'follower' | 'stopped';

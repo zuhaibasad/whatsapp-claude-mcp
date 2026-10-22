@@ -12,12 +12,11 @@ description: List WhatsApp messages that mention or reply to the user and draft 
 - `.wa-bridge/departments.yaml` / `priorities.yaml` are optional guidance (Read tool), not strict rules.
 
 ## Steps
-1. Call `mcp__wa-bridge__get_status`. Warn at the top if not linked, daemon not running, or `minutes_since_sync` > 60.
-2. Call `mcp__wa-bridge__get_mentions` (default `since: "last_review"`, or the period the user asked for).
-3. If a mention is ambiguous (short, refers to earlier context), call `mcp__wa-bridge__get_messages` for that chat to read the messages around it. Use `reply_to` to follow threads.
-4. For each mention give: who, what they want, ref, reason (`at_mention`, `name`, `reply`), and a suggested reply.
-5. Skip mentions that are only thanks; list them in one line at the end. Personal/family chats: draft a reply only if something is clearly asked of the user.
-6. Optionally offer `save_items` for mentions needing follow-up (ask first).
+1. Call `mcp__wa-bridge__whatsapp_brief` once (with `since` if the user named a period). Warn at the top if `status` says not linked or `minutes_since_sync` > 60. Use `mentions` plus `mentions_me: true` messages in `new_messages`.
+2. If a mention is ambiguous (short, refers to earlier context), call `mcp__wa-bridge__whatsapp_read` (`action: "messages"`, `chat`) to read the messages around it. Use `reply_to` to follow threads.
+3. For each mention give: who, what they want, ref, reason (`at_mention`, `name`, `reply`), and a suggested reply.
+4. Skip mentions that are only thanks; list them in one line at the end. Personal/family chats: draft a reply only if something is clearly asked of the user.
+5. Optionally offer `whatsapp_items` (`action: "save"`) for mentions needing follow-up (ask first).
 
 ## Suggested reply style
 - Match the asker's language mix and tone (Roman Urdu stays Roman Urdu; English stays English). Short and polite.

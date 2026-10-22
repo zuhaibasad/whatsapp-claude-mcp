@@ -1,6 +1,6 @@
 # wa-bridge skills
 
-Five Claude skills that drive the `wa-bridge` MCP server (tools appear as `mcp__wa-bridge__<tool>`). All are read-only toward WhatsApp.
+Five Claude skills that drive the `wa-bridge` MCP server (tools appear as `mcp__wa-bridge__<tool>`: `whatsapp_brief`, `whatsapp_status`, `whatsapp_read`, `whatsapp_items`, `whatsapp_mark_reviewed`, `whatsapp_setup`, `whatsapp_choose_chats`). All are read-only toward WhatsApp.
 
 | Skill | Use |
 | --- | --- |

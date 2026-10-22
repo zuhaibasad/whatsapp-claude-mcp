@@ -13,17 +13,18 @@ description: Produce the user's briefing of new WhatsApp group messages since th
 - `.wa-bridge/departments.yaml` and `.wa-bridge/priorities.yaml` are guidance, not strict rules. Read them with the Read tool (if missing, use common sense).
 
 ## Steps
-1. Call `mcp__wa-bridge__get_status`. If `link_status` is not `linked`, `daemon_running` is false or `minutes_since_sync` > 60, put a warning line at the very top (the brief may be incomplete). If unlinked, point to `wa-setup`.
-2. Call `mcp__wa-bridge__get_new_messages` with `since: "last_review"`. If `truncated` is true, fetch the remaining chats one by one (`chats: [id]`, or `get_messages`) and tell the user if anything is still cut off.
+1. Call `mcp__wa-bridge__whatsapp_brief` once (it waits for sync and returns `status`, `new_messages`, `mentions`, `open_items_count`). If `status.link_status` is not `linked` or `status.minutes_since_sync` > 60, put a warning line at the very top. If unlinked, call `whatsapp_setup`.
+   If `new_messages.truncated` is true, read the busiest chats with `whatsapp_read` (`action: "messages"`, `chat`, `since`) and tell the user if anything is still cut off.
+2. Mentions are already in the result (`mentions`, plus `mentions_me: true` messages in `new_messages`). Do not call another tool for them.
 3. Read the two YAML files above.
 4. Classify each conversation (group related messages into one item; do not list every message):
    - **Critical**: outage, money/payment problem, client complaint, deadline today, security incident, or a person clearly blocked on the user.
-   - **Mentions**: `mentions_me: true`, or replies to the user (see also `get_mentions`).
+   - **Mentions**: `mentions_me: true`, or replies to the user (see `mentions`).
    - **By department**: other actionable items, grouped by department from `departments.yaml` (ERP, IT, Finance, ...). Use "Other" if none fits.
    - **FYI**: updates, thanks, announcements, no action needed.
 5. **Personal / family / social groups**: the user's data includes them. Do not list them item by item. Collapse into one FYI line, e.g. "3 family/social chats active (about 40 messages), nothing addressed to you." Only surface personal content as an action item if it clearly asks the user for something (a direct question, a request, a deadline for them). When in doubt, FYI with `unsure`.
-6. Call `mcp__wa-bridge__save_items` for actionable items only (Critical, Mentions needing action, department items): `{ref, category, department, priority, summary, requester}`. Use the ref of the message that best represents the item. The tool de-duplicates. Do not save FYI items.
-7. Write the brief, then ask: "Mark these chats as reviewed up to <time>?" Only on a clear yes call `mcp__wa-bridge__mark_reviewed` (this moves wa-bridge's own bookmark, not anything in WhatsApp). Use the timestamp of the newest message you actually read as `until`.
+6. Call `mcp__wa-bridge__whatsapp_items` with `action: "save"` for actionable items only (Critical, Mentions needing action, department items): `items: [{ref, category, department, priority, summary, requester}]`. Use the ref of the message that best represents the item. It de-duplicates. Do not save FYI items.
+7. Write the brief, then ask: "Mark these chats as reviewed up to <time>?" Only on a clear yes call `mcp__wa-bridge__whatsapp_mark_reviewed` with `until` = the timestamp of the newest message you actually read (this moves wa-bridge's own bookmark, not anything in WhatsApp).
 
 ## Output format
 ```

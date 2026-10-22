@@ -62,10 +62,10 @@ describe('read tools', () => {
     h.store.insertMessage(msg({ ts: T0 - 200 }));
     expect((await h.call('get_new_messages')).json.chats[0].messages).toHaveLength(2);
     const iso = new Date((T0 - 250) * 1000).toISOString();
-    const mr = await h.call('mark_reviewed', { until: iso });
+    const mr = await h.call('whatsapp_mark_reviewed', { until: iso });
     expect(mr.json.updated).toBeGreaterThan(0);
     expect((await h.call('get_new_messages')).json.chats[0].messages).toHaveLength(1);
-    await h.call('mark_reviewed', { chats: ['ERP support 🚀'], until: new Date(T0 * 1000).toISOString() });
+    await h.call('whatsapp_mark_reviewed', { chats: ['ERP support 🚀'], until: new Date(T0 * 1000).toISOString() });
     expect((await h.call('get_new_messages')).json.chats).toHaveLength(0);
   });
 
@@ -165,7 +165,7 @@ describe('errors', () => {
   });
   it('rejects bad arguments and bad times', async () => {
     expect((await h.call('get_messages', {})).text).toContain('invalid arguments');
-    expect((await h.call('mark_reviewed', { until: 'yesterday-ish' })).text).toContain('invalid until');
+    expect((await h.call('whatsapp_mark_reviewed', { until: 'yesterday-ish' })).text).toContain('invalid until');
     expect((await h.call('update_item', { id: 999, status: 'done' })).text).toContain('no item');
   });
 });

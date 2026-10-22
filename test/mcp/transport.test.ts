@@ -1,7 +1,7 @@
 import { InMemoryTransport, type JSONRPCMessage } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer } from '../../src/mcp/server.js';
-import { G1, T0, harness, msg, type Harness } from './helpers.js';
+import { T0, harness, msg, type Harness } from './helpers.js';
 
 let h: Harness;
 afterEach(() => h.cleanup());
@@ -39,17 +39,15 @@ describe('MCP over a linked in-memory transport', () => {
     const list = await request('tools/list', {});
     const names = list.result.tools.map((t: { name: string }) => t.name).sort();
     expect(names).toEqual([
-      'export_items', 'get_chat_info', 'get_mentions', 'get_messages', 'get_new_messages', 'get_status',
-      'list_chats', 'list_items', 'mark_reviewed', 'open_setup', 'save_items', 'search_messages', 'set_chat_inclusion',
-      'update_item', 'wait_for_sync',
+      'whatsapp_brief', 'whatsapp_choose_chats', 'whatsapp_items', 'whatsapp_mark_reviewed', 'whatsapp_read', 'whatsapp_setup', 'whatsapp_status',
     ]);
     for (const t of list.result.tools) expect(t.description.length).toBeGreaterThan(40);
 
-    const call = await request('tools/call', { name: 'get_new_messages', arguments: { chats: [G1] } });
+    const call = await request('tools/call', { name: 'whatsapp_brief', arguments: { wait_for_sync_seconds: 0 } });
     const body = JSON.parse(call.result.content[0].text);
-    expect(body.chats[0].messages[0].text).toBe('salam 👋');
+    expect(body.new_messages.chats[0].messages[0].text).toBe('salam 👋');
 
-    const bad = await request('tools/call', { name: 'get_messages', arguments: { chat: 'nope' } });
+    const bad = await request('tools/call', { name: 'whatsapp_read', arguments: { action: 'messages', chat: 'nope' } });
     expect(bad.result.isError).toBe(true);
 
     await clientSide.close();

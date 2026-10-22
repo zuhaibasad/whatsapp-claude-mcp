@@ -71,6 +71,6 @@ export function createHostClient(paths: DataPaths, opts: HostClientOptions = {})
     waitForSync: (timeoutMs) =>
       call<{ collector: CollectorState; waitedMs: number }>('wait_for_sync', { timeoutMs }, { timeoutMs: timeoutMs + 10_000 }),
     mintNonce: () => call<{ nonce: string }>('mint-nonce', {}),
-    openSetup: () => call<{ opened: true }>('open-setup', {}),
+    openSetup: (screen) => call<{ opened: true }>('open-setup', { screen: screen ?? 'auto' }),
   };
 }
