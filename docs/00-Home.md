@@ -21,3 +21,4 @@ A read-only WhatsApp bridge for Claude Desktop and Claude Code. This `docs/` fol
 
 ## Sessions
 - [[2026-10-21-22-build-to-0.2.0]]
+- [[2026-10-22-0.3.0-ocr-and-chatai]]
