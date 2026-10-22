@@ -1,63 +1,58 @@
-# Handoff — state at end of session (2026-10-22 evening)
+---
+type: handoff
+updated: 2026-10-22
+---
 
-Read this first (auto-injected at session start), then `docs/AGENTS.md` (how workers run), `docs/DECISIONS.md` (why things are the way they are) and `docs/PLAN.md` §11.
+# HANDOFF: read this first (auto-injected at session start)
 
-## Product in one paragraph
-wa-bridge gives Claude **read-only** access to the user's own WhatsApp chats.
-- **Targets:** Claude Desktop (main; `.mcpb` extension with an in-chat setup panel), plus Claude Code and the CLI. claude.ai web is **out**, because it cannot reach local tools without exposing data.
-- **No background service:** the WhatsApp collector runs **inside the MCP server process only while Claude is open**, and catches up on start. Lock election means one connection, even with Desktop and Code open together.
-- **Data:** an encrypted SQLite store (SQLCipher), with the key in the OS keychain. On Windows the data lives in `%USERPROFILE%\.wa-bridge`, **not AppData**, because Claude Desktop's MSIX redirects new AppData folders.
-- **Tools:** 7 model-visible tools (`whatsapp_brief/status/read/items/mark_reviewed/setup/choose_chats`), plus hidden `setup_*` tools for the panel.
+## Current state
+- **Version 0.2.0 is complete on `main`** and nothing is in flight: no worktrees, all workers (T1–T21) merged.
+  - `npm run check`: 380 tests pass.
+  - `build:mcpb` and `smoke:mcpb` pass.
+  - `scripts/dev/accept-flow.mjs` passes against the packaged build.
+  - `scripts/dev/migration-dryrun.mjs` passes: a copy of the real 0.1 Desktop data migrates to schema v3 with a backup.
+- **Install file ready:** `C:\tempfolder\wa-bridge-0.2.0.mcpb` (16.9 MB).
+- **The user has NOT installed 0.2.0 yet.** 0.1.0 is installed in Claude Desktop, and its data sits in the MSIX-redirected folder. 0.2.0 migrates it to `%USERPROFILE%\.wa-bridge` on first start.
+- The README was rewritten (180 lines, visuals in `docs/assets/`).
 
-## Where things stand
-- **`main`** (last orchestrator commit `09f1661` + user commit `038e5e8` "adding license and readme"): all of T1–T17 merged and integrated. `npm run check` was green at 327 tests (re-run it). The 0.2.0 `.mcpb` built and smoke-tested before the README commit.
-- **The user tested 0.1.0 in Claude Desktop:** linking, catch-up after restart, briefs and critical items all worked. Their feedback drove T15–T17 (names, recency, channels, fewer tools, picker-first) and the data-dir move.
-- **0.2.0 has NOT been installed by the user yet.** The migration from the 0.1.0 Desktop sandbox folder was dry-run on a copy of the real data and passed (`scripts/dev/migration-dryrun.mjs`).
+## What 0.2.0 contains (vs the 0.1.0 the user tested)
+- **Data and names:**
+  - contact names and LID→phone, activity and unread for every chat;
+  - Channels tab and phone search;
+  - data dir moved out of AppData, with migration and encrypted backups before upgrades.
+- **Tools and briefs:**
+  - 7 tools;
+  - one `whatsapp_brief` call that waits for sync;
+  - the picker opens for "add a chat";
+  - a permissions tip at the end of onboarding.
+- **Message quality:** an untrusted-content notice, quoted-reply text, `context_before`, location and contact cards.
+- **Connection health:** sleep/resume and stall detection, health meta, proxy support.
+- **Lifecycle:**
+  - Disconnect in the panel, needing user proof;
+  - per-chat notes in `departments.yaml`;
+  - `whatsapp_status {diagnose:true}` and `wa-bridge doctor`.
 
-## In flight when the session ended (git worktrees under `.claude/worktrees/`)
-| Task | Spec | Branch | Status |
-|---|---|---|---|
-| T18 content/context | `docs/tasks/T18-content-context.md` | merged | **Merged** (schema v3). |
-| T19 connection health + proxy | `docs/tasks/T19-connection-health.md` | merged | **Merged**. T20 must pass `onFrame` in the host default factory. |
-| T20 lifecycle (Disconnect in panel with user proof, chat notes, diagnose / `wa-bridge doctor`, backups before migrations) | `docs/tasks/T20-lifecycle-ops.md` | `worktree-agent-a48482ff6c0d18f69` | Same. |
-| T21 README + licence options | (prompt) | merged | **Merged**: README 180 lines, docs/assets, GITHUB_SEO.md, LICENSE_OPTIONS.md. |
-
-**How to recover:**
-1. `git worktree list`
-2. For each branch, `git log main..<branch>` to see what was committed, and check the uncommitted changes inside the worktree.
-3. If a worker is not reachable any more, start a new Sonnet worker on the same spec in a fresh worktree. Tell it to first `git merge <old-branch>` (or copy its uncommitted files) and continue.
-4. The board `.agents/BOARD.md` shows START/DONE/INFO posts.
-
-## Next steps (agreed with the user)
-1. Finish and merge T18, T19 and T20, then T21.
-   - **Expected conflicts:** `src/mcp/server.ts` (T18 formatting call sites vs T20 tools), `src/mcp/instructions.ts` (both add a line), `src/core/service.ts` (T20 makes `disconnect`/`diagnose` required), `src/core/constants.ts` (T18 bumps `SCHEMA_VERSION` to 3), `ui/logic.ts` (T20 removes the `UiOpName` exclusions), and the host's default WaClient factory must pass T19's `onFrame`.
-2. **Integration checks:**
-   - `npm run check`, `npm run build`, `npm run build:mcpb`, `npm run smoke:mcpb`.
-   - `scripts/dev/accept-flow.mjs` against the unpacked `.mcpb` (it should cover disconnect proof too: add a check that disconnect with the control token is refused).
-   - `scripts/dev/migration-dryrun.mjs` again (it now includes the v2→v3 upgrade and backups).
-   - Clean up stray test keychain entries (`cmdkey /list | grep wa-bridge`). Keep `project-0a3a77d63a17e508` (the user's Desktop key; its legacy path is `%LOCALAPPDATA%\wa-bridge`) and `project-ad81168d44ced01f` (the dev project `C:\tempfolder\wa-bridge`).
-3. Copy `build/wa-bridge-0.2.0.mcpb` to `C:\tempfolder\` and give the user Desktop test steps:
-   - install over 0.1.0;
-   - "Set up WhatsApp" / "add a chat" opens the picker (check Channels tab, names, phone search, recency);
-   - permissions tip;
-   - brief with a single `whatsapp_brief` call;
-   - Disconnect screen (cancel it);
-   - `whatsapp_status` diagnose.
-
-   A fresh link fills in names and activity for all old chats at once. Without one, they fill in gradually.
-4. Review the T21 README and licence recommendation with the user. The licence change is the user's decision.
-
-## Gotchas learned
-- **Shell:** Git Bash eats backslashes in `node -e`, heredocs into JS template strings, and `sed`. For Windows paths and regexes, use the Write/Edit tools or `path.join`. `cmd //c` is needed for `cmdkey` and `mklink`.
-- **Worker worktrees:** Write/Edit can't reach outside the worktree, but shell appends to `.agents/BOARD.md` work. Notes go to `docs/notes/<task>.md` in the branch. Before `git worktree remove`, remove the `node_modules` junction with `cmd //c rmdir`.
-- **Read-only guard** (`test/guard/`): **any identifier or string** equal to a WhatsApp write-API name fails the build. `logout` is allowed only inside `unlink` in `src/daemon/wa/wa-client.ts`.
-- **Packaging pruning:** a too-broad regex once deleted `baileys/lib/Utils/history.js`. The smoke test catches this now. Keep LICENSE files.
-- **Claude Desktop facts** (R3 + addendum): Electron node v24, CWD `system32`; child processes are killed; panels and app-only tools work; MSIX redirects *new* AppData folders.
-- **Session limits:** many parallel Sonnet workers can hit the account's session limit. Resume them with SendMessage after the reset rather than restarting.
-
-## Held for later (user decision)
-Voice-note transcription, missed-call items, call transcription (research only), claude.ai via tunnel, macOS/Linux, an n8n webhook for unattended CRM push, and per-department routing to Notion/ClickUp via Claude connectors. See `docs/ROADMAP.md`.
+## Next steps
+1. **The user tests 0.2.0 in Claude Desktop.**
+   1. Settings → Extensions → install `C:\tempfolder\wa-bridge-0.2.0.mcpb` over 0.1.0. It should keep the link; if not, re-link.
+   2. "Give me my WhatsApp brief". It should make one tool call.
+   3. "Add a chat". The picker should open: check the Channels tab, names and numbers, sort by recent or unread, and phone search.
+   4. Open the Disconnect screen and **cancel** it.
+   5. "Run a WhatsApp diagnose".
+   6. Set the tools to "Always allow" (Settings → Extensions).
+2. Fix whatever the test finds, inline and small.
+3. After a fresh link, names and activity fill in for all chats; otherwise they fill in gradually.
 
 ## Waiting on the user (decisions)
-- **Licensing: blocks any public `.mcpb` release.** `baileys` → `libsignal` 6.0.0 is **GPL-3.0** (verified in node_modules). The `.mcpb` bundles it, so distributing it publicly likely makes the bundle GPL-3.0 with a source offer. Options and a recommendation are in `docs/LICENSE_OPTIONS.md` (keep Apache-2.0 core, fix NOTICE, ship third-party licences, keep premium separate). Private use by friends is less affected, but get the decision before publishing.
-- Review the new README (`README.md`, visuals in `docs/assets/`) and the repo name/topics in `docs/GITHUB_SEO.md`. The clone URL in README still says `zuhaibasad/whatsapp-claude-mcp`.
+- **Licensing blocks any PUBLIC `.mcpb` release.** `baileys` → `libsignal` 6.0.0 is **GPL-3.0**, and it is bundled in the `.mcpb`. See `docs/LICENSE_OPTIONS.md`. Private use by friends is less affected.
+- Review the README and `docs/GITHUB_SEO.md` (repo name, topics). The clone URL in the README is a placeholder repo name.
+
+## Gotchas
+- **Keychain:** keep `project-0a3a77d63a17e508` (the 0.1 Desktop key; legacy path `%LOCALAPPDATA%\wa-bridge`; it plus its service-token are the user's real data) and `project-ad81168d44ced01f` (the dev project `C:\tempfolder\wa-bridge`). Test runs leave stray `project-*` entries, so remove them with `cmdkey /delete:<target>`.
+- **Shell:** Git Bash eats backslashes. Use Edit/Write or `path.join`. Use `cmd //c` for `cmdkey` and `mklink`.
+- **Read-only guard:** any identifier or string equal to a WhatsApp write-API name fails the build.
+- **Claude Desktop:** MSIX redirects *new* AppData folders, and child processes are killed. Panels and app-only tools work.
+- **Token economy:** see CLAUDE.md. Do small fixes inline and use at most 1–2 workers.
+
+## Last session
+[[2026-10-21-22-build-to-0.2.0]]
