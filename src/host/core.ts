@@ -217,10 +217,10 @@ export class HolderCore implements HostOps {
     return { nonce: this.nonces.mint(NONCE_TTL_MS) };
   }
 
-  async openSetup(): Promise<{ opened: true }> {
+  async openSetup(screen?: 'auto' | 'chats'): Promise<{ opened: true }> {
     if (!this.port) throw new HostError(503, 'the control server is not listening yet');
     const token = this.browserTokens.mint(BROWSER_TOKEN_TTL_MS);
-    this.deps.openUrl(`http://127.0.0.1:${this.port}/setup?t=${token}`);
+    this.deps.openUrl(`http://127.0.0.1:${this.port}/setup?t=${token}${screen === 'chats' ? '&screen=chats' : ''}`);
     return { opened: true };
   }
 

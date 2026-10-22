@@ -11,11 +11,10 @@ description: Export wa-bridge follow-up items to a CSV or JSON file, and optiona
 - Exports contain summaries of the user's chats. Remind the user the file is sensitive and unencrypted, and ask before sending it to any outside service.
 
 ## Steps
-1. Call `mcp__wa-bridge__get_status` (warn if disconnected or `minutes_since_sync` > 60; the export reflects what the store has).
-2. If not stated, ask for the format: `csv` (opens in Excel, Urdu text preserved) or `json`. Default `csv`. Default status filter is `open`.
-3. Call `mcp__wa-bridge__export_items` with `{format, status}`. Pass `path` only if the user names one; it must be inside the project folder or the call fails. Do not try to work around that.
-4. Report the returned `path` and `count`. If `count` is 0 say so and suggest running `wa-daily-brief` first.
-5. If a Google Sheets or Notion connector is available in this session, offer to push the rows. **Ask first**, say what will be sent (row count, columns) and where, and proceed only on a clear yes. If none is available, say so and stop.
+1. If not stated, ask for the format: `csv` (opens in Excel, Urdu text preserved) or `json`. Default `csv`. Default status filter is `open`.
+2. Call `mcp__wa-bridge__whatsapp_items` with `{action: "export", format, status}`. Pass `path` only if the user names one; it must be inside the project folder or the call fails. Do not try to work around that.
+3. Report the returned `path` and `count`. If `count` is 0 say so and suggest running `wa-daily-brief` first.
+4. If a Google Sheets or Notion connector is available in this session, offer to push the rows. **Ask first**, say what will be sent (row count, columns) and where, and proceed only on a clear yes. If none is available, say so and stop.
 
 ## Output format
 ```

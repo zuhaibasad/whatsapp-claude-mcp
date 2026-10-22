@@ -10,7 +10,7 @@ export interface HostBridge {
   /** Mints a single-use panel nonce (control-token level call). Never returned to the model. */
   mintNonce(): Promise<string>;
   /** Asks the lock holder to open the setup page in the default browser. Returns no URL. */
-  openSetup(): Promise<void>;
+  openSetup(screen?: 'auto' | 'chats'): Promise<void>;
   /** acceptRisk with the panel nonce that was embedded in the setup HTML. */
   acceptRisk(nonce: string): Promise<SetupState>;
   stop(): Promise<void>;
@@ -20,7 +20,7 @@ export interface HostBridge {
 interface HostOps extends SetupOps {
   acceptRisk(nonce?: string): Promise<SetupState>;
   mintNonce(): Promise<{ nonce: string }>;
-  openSetup(): Promise<{ opened: true }>;
+  openSetup(screen?: 'auto' | 'chats'): Promise<{ opened: true }>;
 }
 interface HostModule {
   startHost(paths: DataPaths): unknown;
@@ -37,8 +37,8 @@ export async function loadRealHost(paths: DataPaths, onError: (e: unknown) => vo
   return {
     ops: () => mod.getSetupOps(paths),
     mintNonce: async () => (await mod.getSetupOps(paths).mintNonce()).nonce,
-    openSetup: async () => {
-      await mod.getSetupOps(paths).openSetup();
+    openSetup: async (screen) => {
+      await mod.getSetupOps(paths).openSetup(screen);
     },
     acceptRisk: (nonce) => mod.getSetupOps(paths).acceptRisk(nonce),
     stop: async () => {

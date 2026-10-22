@@ -1,5 +1,5 @@
 // Smoke test for the packed .mcpb: unpack it, start the MCP server over stdio against a temp data dir,
-// and check initialize, tools/list (open_setup) and resources/read of the setup UI. No WhatsApp connection.
+// and check initialize, tools/list (whatsapp_*) and resources/read of the setup UI. No WhatsApp connection.
 // Usage: node scripts/smoke-mcpb.mjs [path/to/file.mcpb]
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -82,12 +82,13 @@ try {
 
   const tools = await request('tools/list');
   const names = (tools.result?.tools ?? []).map((t) => t.name);
-  check(names.includes('open_setup'), 'tools/list includes open_setup');
-  check(names.includes('get_status') && names.includes('wait_for_sync') && names.includes('set_chat_inclusion'), 'tools/list includes get_status, wait_for_sync, set_chat_inclusion');
+  const expected = ['whatsapp_brief', 'whatsapp_status', 'whatsapp_read', 'whatsapp_items', 'whatsapp_mark_reviewed', 'whatsapp_setup', 'whatsapp_choose_chats'];
+  check(expected.every((n) => names.includes(n)), 'tools/list includes the 7 whatsapp_* tools');
+  check(names.filter((n) => !n.startsWith('setup_')).length === 7, 'exactly 7 model-visible tools');
   check(names.includes('setup_state'), 'app-only tools listed for a client with MCP Apps support');
 
-  const status = await request('tools/call', { name: 'get_status', arguments: {} });
-  check(status.result?.isError !== true, 'get_status works with no data');
+  const status = await request('tools/call', { name: 'whatsapp_status', arguments: {} });
+  check(status.result?.isError !== true, 'whatsapp_status works with no data');
 
   const res = await request('resources/read', { uri: 'ui://wa-bridge/setup.html' });
   if (res.error || !res.result?.contents?.[0]?.text) {
