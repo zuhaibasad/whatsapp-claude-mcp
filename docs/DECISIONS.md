@@ -73,3 +73,6 @@ Newest first. Each entry: date, decision, reason, alternatives.
 - **sharp/@img are not bundled:** baileys imports sharp lazily (with a catch), only for thumbnails and profile pictures when sending. That saves about 19 MB per architecture.
 - **Verification:** CI runs check, build:mcpb and smoke:mcpb on windows-latest and macos-latest. Not yet tried in a real Claude Desktop on a Mac.
 - Node 24 for source installs: better-sqlite3-multiple-ciphers has no Node 22 prebuild on Windows (it falls back to node-gyp).
+
+## 2026-10-22 — First public release (v0.4.0); bundles distributed under GPL-3.0
+- **Decision (user):** publish releases (drafts were invisible to visitors). The source stays MIT. Each `.mcpb` contains libsignal (GPL-3.0), so a bundle as a whole is distributed under GPL-3.0. libsignal's LICENSE ships inside the bundle, and the full source is public (this repo plus the npm lockfile). Stated in NOTICE, the README and the release notes.

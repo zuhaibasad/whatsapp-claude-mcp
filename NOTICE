@@ -1,7 +1,11 @@
 ChatAI for WhatsApp
 Copyright (c) 2026 Zuhaib Asad
-Licensed under the MIT License (see LICENSE).
 
-Third-party dependencies keep their own copyrights and licenses. The Claude Desktop
-bundle (.mcpb) includes them in node_modules with their license files. Notably,
-baileys depends on libsignal, which is licensed under GPL-3.0.
+Source code in this repository: MIT License (see LICENSE).
+
+Claude Desktop bundles (.mcpb): each bundle also contains third-party packages in
+node_modules, each with its own license file. One of them, libsignal (used by baileys
+for WhatsApp's encryption), is licensed under GPL-3.0. A bundle as a whole is
+therefore distributed under the terms of the GNU General Public License v3.0.
+The complete corresponding source is this repository plus the npm packages listed
+in package-lock.json (all public).

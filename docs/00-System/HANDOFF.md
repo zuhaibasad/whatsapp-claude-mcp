@@ -12,7 +12,7 @@ updated: 2026-10-22
 - `npm run check`: 396 tests pass. `build:mcpb` (23.7 MB) and `smoke:mcpb` pass. OCR works from the packaged build.
 - **Install file:** `C:\tempfolder\chatai-0.3.0.mcpb`. Older `wa-bridge-0.1/0.2.mcpb` files sit next to it and are obsolete.
 - **Nobody runs it right now.** The user unlinked their phone, and every keychain entry was deleted. A friend tested 0.2.0 (it worked; images were not read) and has not got 0.3.0 yet.
-- **Not pushed:** local `main` is ahead of `origin/main`. GitHub has a **draft** release v0.3.0 (`chatai-0.3.0.mcpb` attached), targeting `main`.
+- **Released:** v0.4.0 is PUBLISHED on GitHub with `chatai-0.4.0-windows.mcpb` and `chatai-0.4.0-macos.mcpb`. CI (Windows + macOS) is green. Not yet tested in a real Claude Desktop on a Mac.
 
 ## What 0.3.0 adds (vs 0.2.0)
 - **Images in selected chats:**
@@ -39,11 +39,11 @@ updated: 2026-10-22
    - if it does, try **Dispatch** from the phone;
    - otherwise try Claude Code **Remote Control** (`claude remote-control`).
    - Only if both fail: an HTTP transport plus a self-deployable relay. That plan is in the 2026-10-22 session log.
-3. Push `main`, then publish the draft once licensing is decided.
+3. Test the macOS bundle in a real Claude Desktop on a Mac.
 4. Later: PDF bills, Urdu OCR (`urd` traineddata), proxy support for media downloads.
 
 ## Waiting on the user (decisions)
-- **Project license is now MIT** (was Apache-2.0). **The GPL part still blocks any PUBLIC release:** `baileys` → `libsignal` 6.0.0 is **GPL-3.0** and bundled. See `docs/LICENSE_OPTIONS.md`.
+- **License:** source MIT; bundles distributed under GPL-3.0 (libsignal), stated in NOTICE and README. Decided 2026-10-22.
 - **Whether to push `main`** (not done, not yet asked).
 
 ## Gotchas

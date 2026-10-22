@@ -225,7 +225,7 @@ Seven MCP tools: `whatsapp_brief`, `whatsapp_status`, `whatsapp_read`, `whatsapp
 
 ## License
 
-[MIT](LICENSE) for this project's code. Dependencies keep their own licenses (see [NOTICE](NOTICE)): the bundled `libsignal` (via `baileys`) is GPL-3.0. Details in [docs/LICENSE_OPTIONS.md](docs/LICENSE_OPTIONS.md).
+[MIT](LICENSE) for this project's source code. The downloadable `.mcpb` bundles also contain `libsignal` (GPL-3.0, used by `baileys` for WhatsApp encryption), so each bundle as a whole is distributed under GPL-3.0. See [NOTICE](NOTICE) and [docs/LICENSE_OPTIONS.md](docs/LICENSE_OPTIONS.md).
 
 ## Disclaimer
 
