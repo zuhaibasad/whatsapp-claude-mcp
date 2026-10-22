@@ -113,7 +113,7 @@ export function createHost(paths: DataPaths, over: Partial<HostDeps> = {}): Host
     submitSelection: wrap((o) => (ids: string[] | null) => o.submitSelection(ids)),
     waitForSync: wrap((o) => (ms: number) => o.waitForSync(ms)),
     mintNonce: wrap((o) => () => o.mintNonce()),
-    openSetup: wrap((o) => () => o.openSetup()),
+    openSetup: wrap((o) => (screen?: 'auto' | 'chats') => o.openSetup(screen)),
   };
 
   return {

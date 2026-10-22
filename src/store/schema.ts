@@ -1,3 +1,4 @@
+import { SCHEMA_VERSION } from '../core/constants.js';
 import type { Db } from '../core/contracts.js';
 
 /** Schema v1 (docs/PLAN.md section 5). messages.mention_reason replaces the plan's mentions_me INT. */
@@ -92,8 +93,8 @@ CREATE TABLE IF NOT EXISTS items (
 CREATE INDEX IF NOT EXISTS idx_items_status ON items (status);
 `;
 
-/** Store schema version (core SCHEMA_VERSION is still 1; the store owns its own number until the orchestrator bumps it). */
-export const STORE_SCHEMA_VERSION = 2;
+/** Store schema version: single source of truth in core constants. */
+export const STORE_SCHEMA_VERSION = SCHEMA_VERSION;
 
 /** v1 -> v2: channel chat type, activity/unread columns, contacts table. Rebuilds chats (CHECK change). */
 const UPGRADE_V2 = `
