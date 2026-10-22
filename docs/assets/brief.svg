@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 760" width="900" height="760" role="img" aria-label="Example WhatsApp brief in a Claude chat (fake data)">
+  <style>
+    text{font-family:Segoe UI,Helvetica,Arial,sans-serif;fill:#e5e7eb;font-size:17px}
+    .m{fill:#9ca3af;font-size:14px}.h{font-weight:700;font-size:19px}.b{font-weight:600}
+    .r{fill:#fca5a5}.o{fill:#fcd34d}.g{fill:#6ee7b7}.p{fill:#a5b4fc}
+  </style>
+  <rect width="900" height="760" rx="18" fill="#1f2421"/>
+  <rect width="900" height="46" rx="18" fill="#2a312d"/><rect y="28" width="900" height="18" fill="#2a312d"/>
+  <circle cx="26" cy="23" r="6" fill="#ef4444"/><circle cx="48" cy="23" r="6" fill="#f59e0b"/><circle cx="70" cy="23" r="6" fill="#10b981"/>
+  <text x="330" y="29" class="m">Chat with Claude  (example, fake data)</text>
+  <!-- user bubble -->
+  <rect x="560" y="68" width="316" height="44" rx="22" fill="#34513f"/>
+  <text x="584" y="96">Give me my WhatsApp brief</text>
+  <text x="32" y="148" class="m">Claude used whatsapp_brief  ·  41 new messages in 6 chats  ·  fresh 2 min ago</text>
+  <text x="32" y="186" class="h r">🔴 Critical (2)</text>
+  <text x="48" y="216">• <tspan class="b">ERP Support:</tspan> Invoice sync band hai since subah. Finance can't close month.</text>
+  <text x="62" y="240" class="m">Kal 5pm tak fix chahiye. Ali is waiting for an ETA.</text>
+  <text x="48" y="270">• <tspan class="b">Warehouse:</tspan> Truck 14 stuck at gate, no GRN entry. Needs approval.</text>
+  <text x="32" y="316" class="h o">🟠 Mentions (3)</text>
+  <text x="48" y="346">• <tspan class="b">Sara</tspan> in Sales Team: "@You quotation aaj bhej dena please"</text>
+  <text x="48" y="372">• <tspan class="b">Bilal</tspan> replied to your message: "Theek hai, PO kal confirm hoga"</text>
+  <text x="48" y="398">• <tspan class="b">Hina</tspan> in IT Help: asked for your view on the VPN change</text>
+  <text x="32" y="444" class="h p">🏢 By department</text>
+  <text x="48" y="474"><tspan class="b">ERP</tspan>  invoice sync issue, 2 users blocked, patch planned tonight</text>
+  <text x="48" y="500"><tspan class="b">Finance</tspan>  month-end close at risk; payment run moved to Thursday</text>
+  <text x="48" y="526"><tspan class="b">Sales</tspan>  3 quotations pending; new lead from Karachi</text>
+  <text x="32" y="572" class="h g">💬 FYI</text>
+  <text x="48" y="602">• Family group: Eid plan finalised, dinner at 8pm Saturday</text>
+  <text x="48" y="628">• Office updates: Monday ko holiday hai</text>
+  <rect x="24" y="656" width="852" height="1" fill="#3b443f"/>
+  <text x="32" y="690" class="b">Suggested reply to Sara (copy and send it yourself):</text>
+  <text x="32" y="716" class="m">"Sara, quotation aaj 4 baje tak bhej deta hun. Thanks for the reminder."</text>
+  <text x="32" y="742" class="m">Claude can draft text. It cannot send messages in WhatsApp.</text>
+</svg>
