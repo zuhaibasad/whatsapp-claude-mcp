@@ -1,3 +1,4 @@
+
 <div align="center">
 
 <img src="docs/assets/hero.svg" alt="ChatAI for WhatsApp: your WhatsApp, briefed by Claude" width="100%">
@@ -14,6 +15,7 @@ Daily WhatsApp brief, mentions, follow-ups, bills and payment screenshots. Roman
 ![Claude Desktop](https://img.shields.io/badge/Claude-Desktop%20%2B%20Code-D97757)
 ![MCP](https://img.shields.io/badge/MCP-server-8A63D2)
 ![Read-only](https://img.shields.io/badge/WhatsApp-read--only-brightgreen)
+[![M8ven Score](https://m8ven.ai/badge/mcp/zuhaibasad/whatsapp-claude-mcp)](https://m8ven.ai/mcp/zuhaibasad/whatsapp-claude-mcp?s=readme)
 
 </div>
 
