@@ -234,3 +234,4 @@ Seven MCP tools: `whatsapp_brief`, `whatsapp_status`, `whatsapp_read`, `whatsapp
 ChatAI for WhatsApp is an independent project. It is not affiliated with, authorized by, or endorsed by WhatsApp LLC, Meta Platforms, or Anthropic. WhatsApp, Meta and Claude are trademarks of their owners, used here only to describe compatibility. Use at your own risk and follow the laws and terms that apply to you.
 
 <div align="center"><sub>Built by <a href="https://github.com/zuhaibasad">Zuhaib Asad</a></sub></div>
+[![M8ven Score](https://m8ven.ai/badge/mcp/zuhaibasad-whatsapp-claude-mcp-vvq9l9?v=c35518a50a11aad26ce1448f7acef529)](https://m8ven.ai/mcp/zuhaibasad-whatsapp-claude-mcp-vvq9l9?s=readme)
