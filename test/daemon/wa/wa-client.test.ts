@@ -93,7 +93,23 @@ describe('createWaClient', () => {
     expect(config[0]).toMatchObject({ markOnlineOnConnect: false, syncFullHistory: false, version: [2, 3000, 1] });
     expect(config[0]!.auth).toBe(auth.state);
     expect(Array.isArray(config[0]!.browser)).toBe(true);
-    expect(await (config[0]!.getMessage as () => Promise<unknown>)()).toBeUndefined();
+    expect(await (config[0]!.getMessage as (k: object) => Promise<unknown>)({ id: 'unknown' })).toBeUndefined();
+  });
+
+  it('sendDirectText: direct chats only, one sendMessage call, and the sent message answers retry requests', async () => {
+    const { client, config, target, accessed } = await build();
+    const sent = { key: { id: 'S1', remoteJid: '5@s.whatsapp.net', fromMe: true }, message: { conversation: 'rate?' } };
+    const sendMessage = vi.fn(async () => sent);
+    Object.assign(target, { sendMessage });
+    await expect(client.sendDirectText('5@s.whatsapp.net', 'rate?')).rejects.toThrow(/not connected/);
+    await client.connect();
+    for (const bad of ['g1@g.us', '1@newsletter', 'status@broadcast', '5@s.whatsapp.net,6@s.whatsapp.net']) {
+      await expect(client.sendDirectText(bad, 'x')).rejects.toThrow(/direct chats only/);
+    }
+    expect(accessed).not.toContain('sendMessage');
+    expect(await client.sendDirectText('5@s.whatsapp.net', 'rate?')).toEqual({ id: 'S1' });
+    expect(sendMessage).toHaveBeenCalledExactlyOnceWith('5@s.whatsapp.net', { text: 'rate?' });
+    expect(await (config[0]!.getMessage as (k: object) => Promise<unknown>)({ id: 'S1' })).toEqual({ conversation: 'rate?' });
   });
 
   it('drives a full session without touching any write API', async () => {

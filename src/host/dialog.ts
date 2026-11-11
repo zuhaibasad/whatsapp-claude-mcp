@@ -5,14 +5,15 @@ import { spawn } from 'node:child_process';
 
 export interface Dialogs {
   /** true = yes, false = no/closed, null = dialogs are not available here. */
-  confirm(title: string, text: string, labels?: { yes: string; no: string }): Promise<boolean | null>;
+  /** timeoutMs: the dialog closes (= no) after this long. Default 10 min. */
+  confirm(title: string, text: string, labels?: { yes: string; no: string }, timeoutMs?: number): Promise<boolean | null>;
   /** Chosen folder, '' = cancelled, null = not available here. */
   pickFolder(title: string, initial: string): Promise<string | null>;
 }
 
 const TIMEOUT_MS = 10 * 60_000;
 
-function run(cmd: string, args: string[], env: Record<string, string>): Promise<{ code: number | null; out: string } | null> {
+function run(cmd: string, args: string[], env: Record<string, string>, timeoutMs = TIMEOUT_MS): Promise<{ code: number | null; out: string } | null> {
   return new Promise((resolve) => {
     let out = '';
     let settled = false;
@@ -29,7 +30,7 @@ function run(cmd: string, args: string[], env: Record<string, string>): Promise<
       resolve(null);
       return;
     }
-    const timer = setTimeout(() => { child.kill(); done({ code: null, out: '' }); }, TIMEOUT_MS);
+    const timer = setTimeout(() => { child.kill(); done({ code: null, out: '' }); }, timeoutMs);
     child.stdout.on('data', (d: Buffer) => { out += d.toString('utf8'); });
     child.on('error', () => done(null));
     child.on('close', (code) => done({ code, out: out.trim() }));
@@ -65,8 +66,8 @@ const AS_FOLDER = `POSIX path of (choose folder with prompt (system attribute "C
 export function nativeDialogs(platform: NodeJS.Platform = process.platform): Dialogs {
   if (platform === 'win32') {
     return {
-      confirm: async (title, text) => {
-        const r = await run('powershell.exe', psArgs(PS_CONFIRM), { CHATAI_DLG_TITLE: title, CHATAI_DLG_TEXT: text });
+      confirm: async (title, text, _labels, timeoutMs) => {
+        const r = await run('powershell.exe', psArgs(PS_CONFIRM), { CHATAI_DLG_TITLE: title, CHATAI_DLG_TEXT: text }, timeoutMs);
         return r === null ? null : r.out === 'Yes';
       },
       pickFolder: async (title, initial) => {
@@ -77,8 +78,8 @@ export function nativeDialogs(platform: NodeJS.Platform = process.platform): Dia
   }
   if (platform === 'darwin') {
     return {
-      confirm: async (title, text, labels = { yes: 'Yes', no: 'No' }) => {
-        const r = await run('osascript', ['-e', AS_CONFIRM], { CHATAI_DLG_TITLE: title, CHATAI_DLG_TEXT: text, CHATAI_DLG_YES: labels.yes, CHATAI_DLG_NO: labels.no });
+      confirm: async (title, text, labels = { yes: 'Yes', no: 'No' }, timeoutMs) => {
+        const r = await run('osascript', ['-e', AS_CONFIRM], { CHATAI_DLG_TITLE: title, CHATAI_DLG_TEXT: text, CHATAI_DLG_YES: labels.yes, CHATAI_DLG_NO: labels.no }, timeoutMs);
         return r === null ? null : r.code === 0 && r.out.endsWith(`button returned:${labels.yes}`);
       },
       pickFolder: async (title) => {

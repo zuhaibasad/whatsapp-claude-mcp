@@ -4,6 +4,7 @@ import type { Logger } from '../core/logger.js';
 import type { CollectorState, SetupOps, SetupScreen } from '../core/service.js';
 import type { SettleOptions } from '../daemon/link.js';
 import type { WaClientFactoryArgs } from '../daemon/runner.js';
+import type { Dialogs } from './dialog.js';
 
 export const HOST_VERSION = '0.1.0';
 
@@ -62,6 +63,8 @@ export interface HostDeps {
   uiHtmlPath: string | null;
   version: string;
   now: () => number;
+  /** Native OS dialogs; the send confirmation uses them so the model cannot approve a message. */
+  dialogs: Dialogs;
 }
 
 /** An error with an HTTP status, safe to show to the caller. */

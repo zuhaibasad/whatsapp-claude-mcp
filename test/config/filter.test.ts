@@ -11,6 +11,7 @@ function cfg(over: Partial<Config> = {}): Config {
     includeChannels: false,
     autoAddNewGroups: false,
     autoAddNewDirectChats: false,
+    allowSending: false,
     allowlist: [],
     denylist: [],
     myNames: [],

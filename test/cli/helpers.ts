@@ -50,6 +50,7 @@ export function fakeClient(opts: { opens?: boolean } = {}): FakeClient {
     },
     close: async () => void calls.push('close'),
     unlink: async () => void calls.push('unlink'),
+    sendDirectText: async () => { calls.push('send'); return { id: 'sent-1' }; },
   };
   return c;
 }

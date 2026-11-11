@@ -125,6 +125,8 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
   let cachedVersion: WAVersion | undefined;
   let versionFetched = false;
   let meId = '';
+  // Messages we sent, so a recipient device's retry request can be answered (else they see "waiting for message").
+  const sentCache = new Map<string, proto.IMessage>();
   const agent = opts.agent ?? createProxyAgent(opts.env);
   const proxy = proxyInfo(opts.env);
   logger.info(proxy.enabled ? { host: proxy.host } : {}, proxy.enabled ? 'proxy: on' : 'proxy: off');
@@ -332,7 +334,8 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
         // Baileys debug/trace logs can contain raw frames; cap at warn so message content never reaches the log.
         logger: logger.child({ class: 'baileys' }, { level: 'warn' }),
         browser: opts.browser ?? defaultBrowser(),
-        getMessage: opts.getMessage ?? (async () => undefined),
+        getMessage: async (key: WAMessageKey) =>
+          (key.id ? sentCache.get(key.id) : undefined) ?? (opts.getMessage ? await opts.getMessage(key) : undefined),
         ...(agent ? { agent, fetchAgent: agent } : {}),
         ...(version ? { version } : {}),
       });
@@ -346,6 +349,23 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
       generation++;
       sock = null;
       if (current) await current.end(undefined);
+    },
+
+    /**
+     * The ONE send path (approved exception, docs/DECISIONS.md 2026-11-11): plain text to a 1-to-1 chat.
+     * Callers must have the user's on-screen confirmation first (HolderCore.sendDirect). Never groups/channels.
+     */
+    async sendDirectText(jid: string, text: string) {
+      if (!/^[\w.:-]+@(s\.whatsapp\.net|lid)$/.test(jid)) throw new Error('sending is allowed to direct chats only');
+      const current = sock;
+      if (!current) throw new Error('WhatsApp is not connected right now');
+      const sent = await current.sendMessage(jid, { text });
+      const id = sent?.key.id ?? null;
+      if (id && sent?.message) {
+        sentCache.set(id, sent.message);
+        if (sentCache.size > 50) sentCache.delete(sentCache.keys().next().value as string);
+      }
+      return { id };
     },
 
     async unlink() {

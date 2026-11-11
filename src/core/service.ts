@@ -72,6 +72,21 @@ export interface SetupOps {
   disconnect(opts: { keepData: boolean }): Promise<SetupState>;
   /** Health check for support: no secrets, no message content. */
   diagnose(): Promise<Diagnosis>;
+  /**
+   * Sends `text` privately to the person who wrote message `ref` ("<chatId>/<messageId>"), only after the user clicks
+   * Yes in a native OS dialog showing the recipient and the exact text. Off unless config allow_sending is true.
+   */
+  sendDirect(opts: { ref: string; text: string }): Promise<SendDirectResult>;
+}
+
+export interface SendDirectResult {
+  sent: boolean;
+  /** Recipient as shown in the dialog (name and phone when known). */
+  to: string;
+  /** Why nothing was sent: cancelled (user said no or closed the dialog), or no_dialog (no desktop to ask on). */
+  reason?: 'cancelled' | 'no_dialog';
+  /** True when the recipient's chat was added to the allowlist so their reply is read. */
+  reply_tracking?: boolean;
 }
 
 export type SetupOpName = keyof SetupOps;

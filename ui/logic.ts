@@ -189,7 +189,8 @@ export function doneSummaryLine(c: SelectionCounts | null): string {
   return `${c.groupsSelected} group${c.groupsSelected === 1 ? '' : 's'} and ${c.directSelected} direct chat${c.directSelected === 1 ? '' : 's'} selected.`;
 }
 
-export type UiOpName = Exclude<SetupOpName, 'waitForSync' | 'acceptRisk' | 'diagnose'>;
+// sendDirect is never reachable from the setup UI.
+export type UiOpName = Exclude<SetupOpName, 'waitForSync' | 'acceptRisk' | 'diagnose' | 'sendDirect'>;
 
 /** Servers may return the value bare or wrapped (structuredContent must be an object, so arrays are wrapped). */
 export function unwrap(op: UiOpName, payload: unknown): unknown {

@@ -17,6 +17,7 @@ class FakeClient implements WaClient {
   connect = vi.fn(async () => undefined);
   close = vi.fn(async () => undefined);
   unlink = vi.fn(async () => undefined);
+  sendDirectText = vi.fn(async (_jid: string, _text: string) => ({ id: 'sent-1' as string | null }));
   on(event: string, listener: (...a: never[]) => void): void {
     this.ee.on(event, listener as (...a: unknown[]) => void);
   }

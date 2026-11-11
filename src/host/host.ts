@@ -9,6 +9,7 @@ import { DaemonAlreadyRunningError, acquireLock } from '../daemon/lock.js';
 import { createWaClient } from '../daemon/wa/index.js';
 import { createHostClient } from './client.js';
 import { HolderCore } from './core.js';
+import { nativeDialogs } from './dialog.js';
 import { migrateLegacyDataDir } from './migrate.js';
 import { startControlServer, type ControlServer } from './server.js';
 import { HOST_VERSION, type HostDeps, type HostHandle, type HostOps, type HostRole } from './types.js';
@@ -41,6 +42,7 @@ export function resolveHostDeps(paths: DataPaths, over: Partial<HostDeps> = {}):
     uiHtmlPath: over.uiHtmlPath ?? process.env['CHATAI_UI_HTML'] ?? null,
     version: over.version ?? HOST_VERSION,
     now: over.now ?? Date.now,
+    dialogs: over.dialogs ?? nativeDialogs(),
   };
 }
 
@@ -115,6 +117,7 @@ export function createHost(paths: DataPaths, over: Partial<HostDeps> = {}): Host
     waitForSync: wrap((o) => (ms: number) => o.waitForSync(ms)),
     disconnect: wrap((o) => (opts: { keepData: boolean; nonce?: string }) => o.disconnect(opts)),
     diagnose: wrap((o) => () => o.diagnose()),
+    sendDirect: wrap((o) => (a: { ref: string; text: string }) => o.sendDirect(a)),
     mintNonce: wrap((o) => (kind?: 'accept' | 'disconnect') => o.mintNonce(kind)),
     openSetup: wrap((o) => (screen?: SetupScreen) => o.openSetup(screen)),
   };

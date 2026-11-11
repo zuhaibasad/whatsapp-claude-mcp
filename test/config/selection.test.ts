@@ -22,7 +22,7 @@ function rng(seed: number): () => number {
 
 const baseCfg: Config = {
   retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false, includeChannels: false,
-  autoAddNewGroups: false, autoAddNewDirectChats: false,
+  autoAddNewGroups: false, autoAddNewDirectChats: false, allowSending: false,
   allowlist: [], denylist: [], myNames: [], maxTextChars: 2000, logLevel: 'info', mediaDownload: true, mediaOcr: true, mediaMaxMb: 500,
 };
 

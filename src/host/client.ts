@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import type { ChatRow, KeyringBackend } from '../core/contracts.js';
 import type { DataPaths } from '../core/paths.js';
-import type { CollectorState, Diagnosis, HostInfo, SelectionSummary, SetupState } from '../core/service.js';
+import type { CollectorState, Diagnosis, HostInfo, SelectionSummary, SendDirectResult, SetupState } from '../core/service.js';
 import { napiKeyringBackend } from '../crypto/index.js';
 import { readControlToken } from './auth.js';
 import { HostError, HostUnavailableError, type HostOps } from './types.js';
@@ -73,6 +73,8 @@ export function createHostClient(paths: DataPaths, opts: HostClientOptions = {})
     disconnect: ({ keepData, nonce }) =>
       call<SetupState>('disconnect', { keepData }, { headers: nonce ? { 'X-Disconnect-Nonce': nonce } : {}, timeoutMs: 120_000 }),
     diagnose: () => call<Diagnosis>('diagnose', {}),
+    // The confirm dialog waits up to 90 s for the user.
+    sendDirect: ({ ref, text }) => call<SendDirectResult>('send_direct', { ref, text }, { timeoutMs: 120_000 }),
     mintNonce: (kind) => call<{ nonce: string }>('mint-nonce', { kind: kind ?? 'accept' }),
     openSetup: (screen) => call<{ opened: true }>('open-setup', { screen: screen ?? 'auto' }),
   };

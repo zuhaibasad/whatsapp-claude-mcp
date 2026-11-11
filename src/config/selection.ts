@@ -147,6 +147,39 @@ function writeAtomic(file: string, text: string): void {
 }
 
 /**
+ * Appends chats to the allowlist in config.yaml (skipping ids already listed), with `note` after the name.
+ * Used after a confirmed direct message so the reply is read. Other keys and comments stay. Returns how many were added.
+ */
+export function addToAllowlist(paths: DataPaths, chats: ChatChoice[], note: string): number {
+  const file = paths.config;
+  const doc = fs.existsSync(file) ? parseDocument(fs.readFileSync(file, 'utf8')) : new Document({});
+  if (doc.errors.length > 0) throw new Error(`${file}: invalid YAML: ${doc.errors[0]?.message ?? 'unknown error'}`);
+  if (doc.contents === null || doc.contents === undefined) doc.contents = doc.createNode({});
+  if (!isMap(doc.contents)) throw new Error(`${file}: expected key: value pairs at the top level`);
+  let seq = doc.get('allowlist', true);
+  if (!isSeq(seq)) {
+    seq = new YAMLSeq();
+    doc.set('allowlist', seq);
+  }
+  const list = seq as YAMLSeq;
+  const have = new Set(list.items.map(entryText).filter((t): t is string => t !== null));
+  let added = 0;
+  for (const c of chats) {
+    if (have.has(c.id)) continue;
+    const node = newEntry(c);
+    node.comment = ` ${[oneLineName(c.name), note].filter(Boolean).join(' - ')}`;
+    list.items.push(node);
+    have.add(c.id);
+    added++;
+  }
+  if (added === 0) return 0;
+  list.flow = false;
+  fs.mkdirSync(paths.dataDir, { recursive: true });
+  writeAtomic(file, doc.toString({ lineWidth: 0 }));
+  return added;
+}
+
+/**
  * Updates include_groups, include_direct_chats, include_channels, allowlist and denylist in config.yaml. Other keys and comments stay.
  * Existing entries that name a chat in `all` (by id, or by name ignoring case) are replaced; other entries are kept.
  * New entries are chat ids with the chat name as a trailing comment. The file is replaced atomically.

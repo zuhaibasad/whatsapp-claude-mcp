@@ -1,4 +1,7 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { InMemoryTransport, type JSONRPCMessage } from '@modelcontextprotocol/server';
+import { resolvePaths } from '../../src/core/paths.js';
 import { afterEach, describe, expect, it } from 'vitest';
 import { createServer, type McpDeps } from '../../src/mcp/server.js';
 import { G1, T0, harness, msg, type Harness } from './helpers.js';
@@ -37,6 +40,16 @@ describe('tool surface', () => {
     const size = JSON.stringify(tools).length;
     console.log(`tools/list size without UI: ${tools.length} tools, ${size} characters`);
     expect(size).toBeLessThan(6000);
+  });
+
+  it('lists whatsapp_send_direct only when allow_sending is true', async () => {
+    h = harness();
+    const cfg = resolvePaths(h.dir).config;
+    fs.mkdirSync(path.dirname(cfg), { recursive: true });
+    fs.writeFileSync(cfg, 'allow_sending: true\n');
+    const tools = await listTools(h.deps, {});
+    expect(tools.map((t) => t.name)).toContain('whatsapp_send_direct');
+    expect(tools.find((t) => t.name === 'whatsapp_send_direct')?.annotations?.readOnlyHint).toBe(false);
   });
 
   it('adds only the app-only setup_* tools for a client with UI support', async () => {

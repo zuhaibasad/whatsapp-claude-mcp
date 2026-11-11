@@ -12,7 +12,7 @@ A read-only WhatsApp bridge for Claude Desktop (`.mcpb`) and Claude Code. TypeSc
 - Keep command output short: `| tail -5`, `grep -E "Tests |✖|error TS"`.
 
 ## Hard rules
-- **Read-only WhatsApp:** never send, react, mark read or show presence. `test/guard/` fails the build on any write-API name; `logout` is allowed only in `unlink` in `src/daemon/wa/wa-client.ts`.
+- **Read-only WhatsApp, two exceptions:** never react, mark read or show presence. `test/guard/` fails the build on any write-API name. Allowed only in `src/daemon/wa/wa-client.ts`: `logout` in `unlink`, and `sendMessage` in `sendDirectText` (opt-in `allow_sending`, every send confirmed by the user in a native OS dialog via `HolderCore.sendDirect`; see DECISIONS 2026-11-11). Do not add other send paths.
 - Never log message text, QR strings, tokens or nonces. Data stays local, encrypted, with the key in the OS keychain.
 - Before committing: `npm run check`. Before handing a build to the user: `npm run build:mcpb && npm run smoke:mcpb`.
 - Windows shells eat backslashes. Use Edit/Write or `path.join` for Windows paths and regexes.

@@ -2,6 +2,13 @@
 
 Newest first. Each entry: date, decision, reason, alternatives.
 
+## 2026-11-11 — Opt-in private messages: `sendMessage` allowed in one place (approved by user)
+- **Decision:** a second write exception. `sendMessage` may appear only inside `sendDirectText()` in `src/daemon/wa/wa-client.ts` (guard map `ALLOWED_EXCEPTION_FUNCTIONS`). It sends plain text to a 1-to-1 chat (`@s.whatsapp.net` / `@lid`). The MCP tool `whatsapp_send_direct` exists only when `allow_sending: true` (default false).
+- **Gate (all in `HolderCore.sendDirect`, not in tool text):** recipient = author of a stored message (`ref`), never yourself, never groups/channels; text ≤ 1000 chars; one message per 20 s, 30 per day; a native Windows/macOS dialog with the recipient and the exact text, which the model cannot answer (90 s, no answer = not sent). The text is never logged. After a send the recipient's 1-to-1 chat is allowlisted so the reply is read.
+- **Why:** the user's workflow: find who lists a product in stock groups, then ask that poster for the price privately.
+- **Risk accepted:** sending through an unofficial client raises the ban risk; README and the config comment say so.
+- **Rejected:** a prefilled `wa.me` link the user sends by hand (kept read-only, but the user wanted Claude to send); sending without a per-message dialog.
+
 ## 2026-10-21 — Phase 1 implementation decisions
 - **Data location:** one `.wa-bridge/` per project folder (the brief's default). The keychain entry is per project path (`project-<sha256 prefix>`).
 - **Baileys logger capped at `warn`.** Baileys' debug/trace output can contain raw frames, and our own logs carry ids and event names only.

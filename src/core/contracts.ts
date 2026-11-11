@@ -39,6 +39,7 @@ export interface Config {
   includeChannels: boolean;       // default false
   autoAddNewGroups: boolean;      // default false; selection keeps include_groups on + denylists the unticked
   autoAddNewDirectChats: boolean; // default false; same for direct chats
+  allowSending: boolean;          // default false; enables whatsapp_send_direct (each send confirmed in an OS dialog)
   allowlist: string[];            // chat JIDs or chat names (case-insensitive exact)
   denylist: string[];             // same; denylist wins over allowlist
   myNames: string[];              // names/nicknames for text mention detection
@@ -239,8 +240,8 @@ export interface WaClientEvents {
 }
 
 /**
- * The ONLY object the rest of the code sees. It exposes no way to send anything to WhatsApp.
- * The single write-type action is unlink(), which calls logout() (approved exception, docs/DECISIONS.md).
+ * The ONLY object the rest of the code sees. Two write-type actions exist, both approved exceptions (docs/DECISIONS.md):
+ * unlink() calls logout(); sendDirectText() sends one user-confirmed text to a 1-to-1 chat. Nothing else writes.
  */
 export interface WaClient {
   on<E extends keyof WaClientEvents>(event: E, listener: WaClientEvents[E]): void;
@@ -250,6 +251,8 @@ export interface WaClient {
   close(): Promise<void>;
   /** Logs out the linked device on WhatsApp. Only called by `chatai unlink`. */
   unlink(): Promise<void>;
+  /** Sends plain text to a direct chat (…@s.whatsapp.net or …@lid). Only after the user confirmed on screen. */
+  sendDirectText(jid: string, text: string): Promise<{ id: string | null }>;
 }
 
 // ---------- onboarding chat picker (T11) ----------

@@ -180,6 +180,11 @@ export async function startControlServer(
           }
           return send(res, 200, await core.submitSelection((ids as string[] | null | undefined) ?? null));
         }
+        case 'send_direct': {
+          // The control token may ask; only the user's click in the native dialog (inside sendDirect) approves.
+          if (typeof body.ref !== 'string' || typeof body.text !== 'string') throw new HostError(400, 'ref and text must be strings');
+          return send(res, 200, await core.sendDirect({ ref: body.ref, text: body.text }));
+        }
         case 'wait_for_sync': {
           const ms = typeof body.timeoutMs === 'number' && body.timeoutMs >= 0 ? Math.min(body.timeoutMs, 600_000) : 30_000;
           return send(res, 200, await core.waitForSync(ms));

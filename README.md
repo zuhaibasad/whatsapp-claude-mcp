@@ -25,7 +25,7 @@ Daily WhatsApp brief, mentions, follow-ups, bills and payment screenshots. Roman
 - 📋 **Daily brief.** Ask "Give me my WhatsApp brief". Get Critical, Mentions, By department and FYI.
 - 🧾 **Bills and payment screenshots.** Images are read on your PC (local OCR). Claude gets the amount, date, reference and bank as text, not the picture, so it costs few tokens.
 - 🔎 **Search and follow-ups.** Find old messages. Save action items. Export them to CSV or JSON.
-- 🛡️ **Read-only and private.** Never sends. Never marks read. Data stays on your PC, encrypted.
+- 🛡️ **Read-only by default, and private.** Never marks read. Optional private messages need your click on Send. Data stays on your PC, encrypted.
 
 <div align="center">
 <img src="docs/assets/brief.svg" alt="Example WhatsApp brief shown in a Claude chat. Fake data." width="760">
@@ -155,10 +155,11 @@ Per-chat notes ("the ERP group is for supplier invoices") live in `departments.y
 
 - 🏠 **Local only.** Messages are stored in `%USERPROFILE%\.chatai` (Windows) or `~/Library/Application Support/chatai` (macOS). The setup page listens on `127.0.0.1` only.
 - 🔐 **Encrypted.** The message database and the WhatsApp session are encrypted. The key is in the OS keychain (Windows Credential Manager or macOS Keychain), never in a file.
-- 👀 **Read-only.** No sending, no blue ticks, no "online" status. Code checks in the test suite block write APIs.
+- 👀 **Read-only by default.** No blue ticks, no "online" status. Code checks in the test suite block every write API except two: logging out (disconnect) and one opt-in private message.
+- ✉️ **Optional private messages (off by default).** With `allow_sending: true` in `config.yaml`, Claude can message someone who posted in your chats, for example to ask a stock poster for a price. Each message needs your click on **Send** in a Windows/macOS pop-up showing the recipient and the exact text; Claude cannot click it. Only 1-to-1 texts, never groups; at most one per 20 seconds and 30 a day. Sending through an unofficial app raises the ban risk, so keep it to a few messages.
 - ✅ **You choose the chats.** Excluded chats are not stored. Direct chats and channels start off. Messages expire after 30 days by default.
 - 🧱 **Untrusted content.** Setup secrets (QR, tokens) never enter Claude's tool results. Every result that carries chat text or image text is marked as data from other people, and Claude is told never to follow instructions found in it.
-- 🧨 **Prompt injection is still a risk.** Someone in a group could write a message, or post a screenshot, aimed at the AI. ChatAI cannot send anything, which limits the damage. Still, be careful when Claude suggests exporting data or opening links it found in chats.
+- 🧨 **Prompt injection is still a risk.** Someone in a group could write a message, or post a screenshot, aimed at the AI. ChatAI cannot send anything unless you turned on `allow_sending`, and even then nothing goes out without your click in the pop-up, which limits the damage. Still, be careful when Claude suggests exporting data or opening links it found in chats.
 
 > [!WARNING]
 > **Know the risks before you connect.**

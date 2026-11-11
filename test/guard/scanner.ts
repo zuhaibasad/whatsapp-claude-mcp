@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import { ALLOWED_EXCEPTIONS, ALLOWED_EXCEPTION_FILE, ALLOWED_EXCEPTION_FUNCTION, isWriteApi } from './denylist.js';
+import { ALLOWED_EXCEPTIONS, ALLOWED_EXCEPTION_FILE, ALLOWED_EXCEPTION_FUNCTIONS, isWriteApi } from './denylist.js';
 
 export type RuleId =
   | 'denylist-api'
@@ -57,9 +57,9 @@ function functionName(node: ts.Node): string | undefined {
   return undefined;
 }
 
-function insideUnlink(node: ts.Node): boolean {
+function insideFunction(node: ts.Node, fn: string | undefined): boolean {
   for (let n: ts.Node | undefined = node.parent; n; n = n.parent) {
-    if (functionName(n) === ALLOWED_EXCEPTION_FUNCTION) return true;
+    if (fn !== undefined && functionName(n) === fn) return true;
   }
   return false;
 }
@@ -92,20 +92,24 @@ export function scanSource(fileName: string, sourceText: string): Violation[] {
     }
   };
 
-  const checkLogout = (node: ts.Node): void => {
-    if (!isAllowedLogoutFile(file) || !insideUnlink(node)) {
-      add(node, 'logout-outside-unlink', 'logout', `logout is allowed only inside ${ALLOWED_EXCEPTION_FUNCTION}() in ${ALLOWED_EXCEPTION_FILE}`);
+  const checkException = (node: ts.Node, name: string, asString = false): void => {
+    const fn = ALLOWED_EXCEPTION_FUNCTIONS[name];
+    if (!isAllowedLogoutFile(file) || !insideFunction(node, fn)) {
+      // logout keeps its historical rule id; other exceptions (sendMessage) count as a denied write API.
+      if (name === 'logout') add(node, 'logout-outside-unlink', name, `logout is allowed only inside ${fn}() in ${ALLOWED_EXCEPTION_FILE}`);
+      else add(node, 'denylist-api', name, `${name} is allowed only inside ${fn}() in ${ALLOWED_EXCEPTION_FILE}${asString ? ' (used as a string)' : ''}`);
     }
   };
 
   const visit = (node: ts.Node): void => {
     if (ts.isIdentifier(node)) {
       if (isWriteApi(node.text)) add(node, 'denylist-api', node.text, 'WhatsApp write API is forbidden (read-only guard)');
-      else if (ALLOWED_EXCEPTIONS.includes(node.text)) checkLogout(node);
+      else if (ALLOWED_EXCEPTIONS.includes(node.text)) checkException(node, node.text);
     } else if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       const inElementAccess = ts.isElementAccessExpression(node.parent) && node.parent.argumentExpression === node;
       if (isWriteApi(node.text)) add(node, 'denylist-api', node.text, 'WhatsApp write API name used as a string (read-only guard)');
-      else if (inElementAccess && ALLOWED_EXCEPTIONS.includes(node.text)) checkLogout(node);
+      else if (node.text === 'logout' && inElementAccess) checkException(node, node.text);
+      else if (node.text !== 'logout' && ALLOWED_EXCEPTIONS.includes(node.text)) checkException(node, node.text, true);
     }
 
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {

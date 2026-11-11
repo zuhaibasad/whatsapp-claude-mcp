@@ -29,6 +29,7 @@ function fakeHost() {
     waitForSync: async () => ({ collector: 'live', waitedMs: 1200 }),
     disconnect: async () => state({ step: 'ready_to_link', qrSvg: null }),
     diagnose: async () => ({ version: '0.1.0', dataDir: 'C:\\x', checks: [{ name: 'data_dir', ok: true, detail: 'fine' }] }),
+    sendDirect: async (a) => { calls.push(`send:${a.ref}`); return { sent: true, to: 'Ali +923001234567', reply_tracking: true }; },
   };
   const host: HostBridge = {
     ops: () => ops,

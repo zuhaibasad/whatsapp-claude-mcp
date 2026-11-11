@@ -5,6 +5,12 @@ updated: 2026-11-11
 
 # HANDOFF: read this first (auto-injected at session start)
 
+## 0.5.0 (committed 2026-11-11, NOT pushed, NOT released): opt-in private messages
+- **Install file:** `C:\tempfolder\chatai-0.5.0-windows.mcpb`. Real send NOT yet tested against WhatsApp: test on the user's own PC with a consenting contact before giving it to the friend (the friend should get 0.4.3 until then).
+- `allow_sending: true` (default false, restart Claude) lists `whatsapp_send_direct {ref, text}`. Gate in `HolderCore.sendDirect`: author of stored message only, direct JIDs only, ≤1000 chars, 20 s gap, 30/day (meta `direct_sent_today`), native dialog 90 s (env-var text, verified on Windows with hostile text + timeout). Allowlists the recipient's phone + LID chat after sending.
+- Guard: `ALLOWED_EXCEPTION_FUNCTIONS` map (logout→unlink, sendMessage→sendDirectText). Docs updated: CLAUDE.md, README, DECISIONS, manifest, instructions.
+- Known gaps: our own sent text is not stored (emitOwnEvents false), so Claude sees only the reply; macOS dialog path untested; no setup-UI switch.
+
 ## 0.4.3 (committed 2026-11-11, NOT pushed, NOT released on GitHub)
 - **Install file:** `C:\tempfolder\chatai-0.4.3-windows.mcpb` (19.4 MB, smoke incl. packaged OCR passes). For the user's friend's Windows PC. macOS bundle not rebuilt.
 - **Crash root cause (0.4.2 still crashed):** tesseract.js 7.0.0 node `getCore` compares the `lstmOnly` boolean to OEM numbers, so it ALWAYS loads non-lstm cores; build pruned them. The failure then threw inside tesseract's worker listener (no `errorHandler`), an uncaught error that killed the MCP. Fixed both; smoke now runs OCR from the bundle.

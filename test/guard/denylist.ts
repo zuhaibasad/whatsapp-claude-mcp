@@ -86,15 +86,20 @@ export const EXTRA_WRITE_API_PATTERNS: readonly RegExp[] = [
 ];
 
 /**
- * Allowed only inside a function named `unlink` in src/daemon/wa/wa-client.ts
- * (approved 2026-10-21, PLAN section 7).
+ * Each name is allowed only inside the named function in src/daemon/wa/wa-client.ts:
+ * - logout in unlink() (approved 2026-10-21, PLAN section 7);
+ * - sendMessage in sendDirectText() (approved 2026-11-11: user-confirmed text to a 1-to-1 chat, DECISIONS.md).
  */
-export const ALLOWED_EXCEPTIONS: readonly string[] = ['logout'];
 export const ALLOWED_EXCEPTION_FILE = 'src/daemon/wa/wa-client.ts';
-export const ALLOWED_EXCEPTION_FUNCTION = 'unlink';
+export const ALLOWED_EXCEPTION_FUNCTIONS: Readonly<Record<string, string>> = {
+  logout: 'unlink',
+  sendMessage: 'sendDirectText',
+};
+export const ALLOWED_EXCEPTIONS: readonly string[] = Object.keys(ALLOWED_EXCEPTION_FUNCTIONS);
 
-/** True if `name` is a denied WhatsApp write API (PLAN list, patterns, or extras). */
+/** True if `name` is a denied WhatsApp write API (PLAN list, patterns, or extras). Exceptions are checked separately. */
 export function isWriteApi(name: string): boolean {
+  if (ALLOWED_EXCEPTIONS.includes(name)) return false;
   return (
     WRITE_API_DENYLIST.includes(name) ||
     EXTRA_WRITE_API_DENYLIST.includes(name) ||

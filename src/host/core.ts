@@ -2,12 +2,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import QRCode from 'qrcode';
-import { buildChatRows, computeRules, writeSelection, type ChatChoice } from '../config/selection.js';
+import { addToAllowlist, buildChatRows, computeRules, writeSelection, type ChatChoice } from '../config/selection.js';
 import { loadConfig } from '../config/index.js';
 import type { ChatRow, MasterKeyStore } from '../core/contracts.js';
 import type { Logger } from '../core/logger.js';
 import type { DataPaths } from '../core/paths.js';
-import type { CollectorState, Diagnosis, SelectionSummary, SetupScreen, SetupState, SetupStep } from '../core/service.js';
+import type { CollectorState, Diagnosis, SelectionSummary, SendDirectResult, SetupScreen, SetupState, SetupStep } from '../core/service.js';
 import { runLinkSession } from '../daemon/link.js';
 import { openDaemonDbs, startCollector, type CollectorHandle, type OpenedDbs } from '../daemon/runner.js';
 import { OneTimeStore } from './auth.js';
@@ -19,6 +19,12 @@ import { BROWSER_TOKEN_TTL_MS, HostError, NONCE_TTL_MS, type HostDeps, type Host
 const msg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 const FIRST_QR_S = 60;
 const NEXT_QR_S = 20;
+const DIRECT_JID = /^[\w.:-]+@(s\.whatsapp\.net|lid)$/;
+const SEND_MAX_CHARS = 1000;
+const SEND_MIN_GAP_MS = 20_000;
+const SEND_DAILY_LIMIT = 30;
+const SEND_CONFIRM_TIMEOUT_MS = 90_000;
+const SEND_COUNT_META = 'direct_sent_today';
 
 export class HolderCore implements HostOps {
   readonly nonces: OneTimeStore;
@@ -32,6 +38,8 @@ export class HolderCore implements HostOps {
   private initError: string | null = null;
   private notice: string | null = null; // non-fatal message for the UI (e.g. offline disconnect)
   private disconnecting = false;
+  private sending = false;
+  private lastSentAt = 0;
   private port = 0;
 
   // flow state (null = at rest, the step is derived from the stores)
@@ -224,6 +232,78 @@ export class HolderCore implements HostOps {
   async disconnect(opts: { keepData: boolean; nonce?: string }): Promise<SetupState> {
     if (!this.disconnectNonces.consume(opts.nonce)) throw new HostError(403, 'disconnecting needs the setup panel or a browser session');
     return this.disconnectVerified({ keepData: opts.keepData });
+  }
+
+  /**
+   * The only user-facing send. Every guard lives here, not in the tool text: allow_sending on, recipient = the author
+   * of a stored message (never a group/channel, never yourself), text only and capped, rate limits, and a native OS
+   * dialog the model cannot answer. Never logs the text.
+   */
+  async sendDirect(opts: { ref: string; text: string }): Promise<SendDirectResult> {
+    const config = loadConfig(this.paths).config;
+    if (!config.allowSending) {
+      throw new HostError(403, 'sending is off: set allow_sending: true in config.yaml, then restart Claude');
+    }
+    const dbs = this.requireDbs();
+    const collector = this.collector;
+    if (!collector) throw new HostError(409, 'WhatsApp is not connected');
+    const text = opts.text.trim();
+    if (text === '') throw new HostError(400, 'the message text is empty');
+    if (text.length > SEND_MAX_CHARS) throw new HostError(400, `the message is longer than ${SEND_MAX_CHARS} characters`);
+
+    const slash = opts.ref.indexOf('/');
+    const m = slash > 0 ? dbs.store.getMessage(opts.ref.slice(0, slash), opts.ref.slice(slash + 1)) : null;
+    if (!m) throw new HostError(404, `no stored message with ref ${opts.ref}: use the ref of a message from a read chat`);
+    if (m.isFromMe) throw new HostError(400, 'that message is yours: pick a message the other person wrote');
+    if (!DIRECT_JID.test(m.senderId)) throw new HostError(400, 'the author of that message cannot be messaged directly');
+    const contact = dbs.store.getContact(m.senderId);
+    const phoneJid = contact?.phoneJid ?? (m.senderId.endsWith('@s.whatsapp.net') ? m.senderId : null);
+    const lid = contact?.lid ?? (m.senderId.endsWith('@lid') ? m.senderId : null);
+    if (phoneJid && phoneJid === dbs.store.getAccount()?.id) throw new HostError(400, 'that is your own number');
+    const jid = phoneJid ?? m.senderId;
+    const name = contact?.savedName ?? m.senderName ?? contact?.pushName ?? contact?.verifiedName ?? null;
+    const phone = phoneJid ? `+${phoneJid.split('@')[0]}` : null;
+    const to = [name, phone].filter(Boolean).join(' ') || 'this contact (no phone number shared)';
+
+    if (this.sending) throw new HostError(409, 'another message is waiting for confirmation');
+    const now = this.deps.now();
+    if (now - this.lastSentAt < SEND_MIN_GAP_MS) {
+      throw new HostError(429, `wait ${Math.ceil((SEND_MIN_GAP_MS - (now - this.lastSentAt)) / 1000)} s before the next message`);
+    }
+    const day = new Date(now).toISOString().slice(0, 10);
+    const [d, n] = (dbs.store.getMeta(SEND_COUNT_META) ?? '').split(' ');
+    const sentToday = d === day ? Number(n) || 0 : 0;
+    if (sentToday >= SEND_DAILY_LIMIT) throw new HostError(429, `the daily limit of ${SEND_DAILY_LIMIT} messages is reached`);
+
+    this.sending = true;
+    try {
+      const where = dbs.store.getChat(m.chatId)?.name;
+      const ok = await this.deps.dialogs.confirm(
+        'ChatAI: send this WhatsApp message?',
+        `Claude wants to send a PRIVATE WhatsApp message from your number.\n\nTo: ${to}${where ? `\n(they posted in: ${where})` : ''}\n\nMessage:\n${text}\n\nSend it?`,
+        { yes: 'Send', no: 'Cancel' },
+        SEND_CONFIRM_TIMEOUT_MS,
+      );
+      if (ok === null) return { sent: false, to, reason: 'no_dialog' };
+      if (!ok) return { sent: false, to, reason: 'cancelled' };
+      await collector.sendDirectText(jid, text);
+      this.lastSentAt = this.deps.now();
+      dbs.store.setMeta(SEND_COUNT_META, `${day} ${sentToday + 1}`);
+      this.logger.info({ to: jid, ok: true }, 'direct message sent');
+      // Read the reply: include the 1-to-1 chat under each id WhatsApp may use for it.
+      const chats: ChatChoice[] = [...new Set([phoneJid, lid].filter((x): x is string => !!x))].map((id) => ({ id, name, type: 'direct' }));
+      let tracking = false;
+      try {
+        addToAllowlist(this.paths, chats, `messaged ${day}`);
+        for (const c of chats) dbs.store.upsertChat({ id: c.id, type: 'direct', included: true, ...(name ? { name } : {}) });
+        tracking = true;
+      } catch (e) {
+        this.logger.warn({ err: msg(e) }, 'could not add the messaged chat to the allowlist');
+      }
+      return { sent: true, to, reply_tracking: tracking };
+    } finally {
+      this.sending = false;
+    }
   }
 
   async diagnose(): Promise<Diagnosis> {

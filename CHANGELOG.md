@@ -2,6 +2,14 @@
 
 All notable changes. Versions follow [semver](https://semver.org/). Dates are release-build dates.
 
+## 0.5.0 (2026-11-11)
+
+### Added
+- **Optional private messages (off by default).** Set `allow_sending: true` in `config.yaml` and restart Claude. The new tool `whatsapp_send_direct` lets Claude send a 1-to-1 text to the person who wrote a message in a chat you read, for example: "which groups list Panadol in stock? Ask that poster for the price privately." Each message opens a Windows/macOS pop-up showing the recipient and the exact text; nothing is sent unless you click Send (no answer within 90 s = not sent). Never groups or channels, never yourself; up to 1000 characters, one message per 20 seconds, 30 a day. The recipient's 1-to-1 chat is then added to the allowlist so their reply is read. The text is never logged.
+
+### Changed
+- ChatAI is now "read-only by default". The build guard allows `sendMessage` in exactly one function; every other write API still fails the build.
+
 ## 0.4.3 (2026-11-11)
 
 ### Added

@@ -8,7 +8,7 @@ import type { Config } from '../../src/core/contracts.js';
 import { SqliteStore } from '../../src/store/index.js';
 
 const cfg: Config = {
-  retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false, includeChannels: false, autoAddNewGroups: false, autoAddNewDirectChats: false,
+  retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false, includeChannels: false, autoAddNewGroups: false, autoAddNewDirectChats: false, allowSending: false,
   allowlist: [], denylist: [], myNames: [], maxTextChars: 2000, logLevel: 'info', mediaDownload: true, mediaOcr: true, mediaMaxMb: 500,
 };
 

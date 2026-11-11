@@ -797,6 +797,27 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       }
     });
 
+  // Opt-in (config allow_sending, read at startup): absent from tools/list unless the user turned sending on.
+  let sendingOn = false;
+  try { sendingOn = loadConfig(paths).config.allowSending; } catch { /* config errors surface in the other tools */ }
+  if (sendingOn) {
+    plain('whatsapp_send_direct',
+      'Send a PRIVATE 1-to-1 text to the person who wrote a message (e.g. ask a stock poster for the price). Only when the user asks you to message someone. One message per call. The user must click Send in a pop-up on this PC; report "sent" only if the result says sent: true. Never sends to groups.',
+      z.object({
+        ref: z.string().describe('chat_id/message_id of a message the person wrote'),
+        text: z.string().min(1).max(1000).describe('the exact message, in the user\'s language'),
+      }),
+      { readOnlyHint: false },
+      async (a) => {
+        const r = await (await needHost()).ops().sendDirect({ ref: String(a.ref), text: String(a.text) });
+        deps.log?.('tool', { name: 'whatsapp_send_direct', ok: true, sent: r.sent });
+        const note = r.sent
+          ? (r.reply_tracking ? 'Sent. Their 1-to-1 chat is now read, so their reply will show up in whatsapp_read.' : 'Sent.')
+          : r.reason === 'no_dialog' ? 'Not sent: no confirmation pop-up could be shown on this computer.' : 'Not sent: the user cancelled or did not answer.';
+        return text({ ...r, note });
+      });
+  }
+
   tool('whatsapp_choose_chats',
     'Only when the user names specific chats to add or remove. If they want to add or remove chats without naming them, or to browse, call whatsapp_setup with screen "chats" instead. Newly added chats collect new messages only. Changes only chatai settings, never WhatsApp.',
     z.object({

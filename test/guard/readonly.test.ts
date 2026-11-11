@@ -55,7 +55,17 @@ describe('read-only guard: denylist', () => {
       expect(WRITE_API_DENYLIST).toContain(n);
     }
     expect(WRITE_API_PATTERNS).toHaveLength(9);
-    expect(ALLOWED_EXCEPTIONS).toEqual(['logout']);
+    expect(ALLOWED_EXCEPTIONS).toEqual(['logout', 'sendMessage']);
+  });
+
+  it('sendMessage is allowed only inside sendDirectText() in wa-client.ts', () => {
+    const ok = `declare const sock: Record<string, (j: string, c: unknown) => Promise<unknown>>;\nexport const c = {\n  async sendDirectText(j: string, t: string) {\n    return sock.sendMessage(j, { text: t });\n  },\n};\n`;
+    expect(scanSource('src/daemon/wa/wa-client.ts', ok)).toEqual([]);
+    const elsewhere = scanSource('src/host/core.ts', ok).filter((v) => v.name === 'sendMessage');
+    expect(elsewhere.map((v) => v.rule)).toEqual(['denylist-api']);
+    const wrongFn = ok.replace('sendDirectText', 'broadcast');
+    expect(scanSource('src/daemon/wa/wa-client.ts', wrongFn).map((v) => v.name)).toEqual(['sendMessage']);
+    expect(scanSource('src/daemon/wa/wa-client.ts', `const n = 'sendMessage';\n`).map((v) => v.rule)).toEqual(['denylist-api']);
   });
 
   it('matches pattern names and does not match read APIs', () => {
