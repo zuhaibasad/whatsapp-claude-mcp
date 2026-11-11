@@ -90,12 +90,13 @@ if (fs.existsSync(bs)) {
   if (fs.existsSync(pre)) for (const f of fs.readdirSync(pre)) if (!target.keep.some((k) => f.startsWith(k))) rm(path.join(pre, f));
 }
 rm(path.join(nm, 'node-addon-api'));
-// OCR: Node loads only the *-lstm cores (wasm file next to the .js loader) and we use the compact best_int English data.
+// OCR: Node loads a .js loader plus the .wasm next to it; only the *.wasm.js (base64-embedded) copies are unused.
+// Keep BOTH lstm and full cores: tesseract.js 7.0.0's node getCore compares a boolean to OEM numbers,
+// so it always picks the non-lstm core (tesseract-core-relaxedsimd etc.) whatever OEM we pass.
 const tcore = path.join(nm, 'tesseract.js-core');
 if (fs.existsSync(tcore)) {
   for (const f of fs.readdirSync(tcore)) {
-    if (!/^tesseract-core/.test(f)) continue;
-    if (!/-lstm\.(js|wasm)$/.test(f)) rm(path.join(tcore, f));
+    if (/^tesseract-core.*\.wasm\.js$/.test(f)) rm(path.join(tcore, f));
   }
 }
 rm(path.join(nm, '@tesseract.js-data', 'eng', '4.0.0'));

@@ -1,9 +1,16 @@
 ---
 type: handoff
-updated: 2026-10-22
+updated: 2026-11-11
 ---
 
 # HANDOFF: read this first (auto-injected at session start)
+
+## 0.4.3 (committed 2026-11-11, NOT pushed, NOT released on GitHub)
+- **Install file:** `C:\tempfolder\chatai-0.4.3-windows.mcpb` (19.4 MB, smoke incl. packaged OCR passes). For the user's friend's Windows PC. macOS bundle not rebuilt.
+- **Crash root cause (0.4.2 still crashed):** tesseract.js 7.0.0 node `getCore` compares the `lstmOnly` boolean to OEM numbers, so it ALWAYS loads non-lstm cores; build pruned them. The failure then threw inside tesseract's worker listener (no `errorHandler`), an uncaught error that killed the MCP. Fixed both; smoke now runs OCR from the bundle.
+- **Desktop logs now live in `%LOCALAPPDATA%\Claude\logs`** (`mcp-server-ChatAI for WhatsApp.log`); our own log is `~/.chatai/daemon.log`.
+- **New: `auto_add_new_groups` / `auto_add_new_direct_chats`** (default off). `computeRules` forces the type default on and denylists unticked chats, so chats first seen later are included. The user must re-pick chats after turning it on. No setup-UI toggle yet (possible next step).
+- Dev machine: user is linked and syncing on the broken 0.4.2; reinstall 0.4.3.
 
 ## Current state
 - **Product: ChatAI for WhatsApp, v0.3.0, committed on `main`.**
@@ -13,6 +20,14 @@ updated: 2026-10-22
 - **Install file:** `C:\tempfolder\chatai-0.3.0.mcpb`. Older `wa-bridge-0.1/0.2.mcpb` files sit next to it and are obsolete.
 - **Nobody runs it right now.** The user unlinked their phone, and every keychain entry was deleted. A friend tested 0.2.0 (it worked; images were not read) and has not got 0.3.0 yet.
 - **Released:** v0.4.0 is PUBLISHED on GitHub with `chatai-0.4.0-windows.mcpb` and `chatai-0.4.0-macos.mcpb`. CI (Windows + macOS) is green. Not yet tested in a real Claude Desktop on a Mac.
+
+## 0.4.1 (built 2026-11-10, NOT committed, NOT released)
+- User reported: after removing 0.2 and installing 0.4, Claude Desktop could not run the connector. Exact launch error was never seen (no Desktop log on the dev machine after 09-14), so ask for `mcp-server-ChatAI*.log` if it persists.
+- Found and fixed: `~/.chatai` held `store.db`/`auth.db` with the keychain key deleted. `initDataFiles` made a NEW key over the old DB, so setup died with "wrong key". Now it throws a clear message, and `whatsapp_setup` runs `src/host/preflight.ts` first.
+- New: `leftovers.ts` (scan/remove old data + keychain keys, fixed file-name list only), `dialog.ts` (native Windows/macOS confirm + folder picker, so the model cannot answer), `preflight.ts` (cleanup question, then data-folder question), `location.json` pointer in the anchor folder (`paths.ts`: `anchorDataDir`, `readLocation`, `writeLocation`). Lock older than last boot is now stale (pid reuse).
+- Dialogs are untested on real screens (PowerShell scripts parse OK; logic tested with fake dialogs, 14 tests). Mac `osascript` path never run.
+- `npm run check` 410 pass; `build/chatai-0.4.1-windows.mcpb` built and smoke-passed. macOS bundle not rebuilt.
+- Cleanup of the current dev machine's `~/.chatai` happens through the dialog on first `whatsapp_setup`, not by hand.
 
 ## What 0.3.0 adds (vs 0.2.0)
 - **Images in selected chats:**

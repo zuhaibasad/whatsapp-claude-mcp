@@ -22,6 +22,7 @@ function rng(seed: number): () => number {
 
 const baseCfg: Config = {
   retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false, includeChannels: false,
+  autoAddNewGroups: false, autoAddNewDirectChats: false,
   allowlist: [], denylist: [], myNames: [], maxTextChars: 2000, logLevel: 'info', mediaDownload: true, mediaOcr: true, mediaMaxMb: 500,
 };
 
@@ -60,6 +61,30 @@ describe('computeRules', () => {
     const all = [g(1), g(2), d(1), d(2)];
     const r = computeRules(all, new Set(all.map((c) => c.id)));
     expect(r).toMatchObject({ includeGroups: true, includeDirectChats: true, allowlist: [], denylist: [] });
+  });
+
+  it('auto-add: type stays on, unticked chats denylisted, a chat seen later is included', () => {
+    const all = [g(1), g(2), g(3), d(1), d(2)];
+    const r = computeRules(all, new Set([g(1).id]), { includeGroups: false, includeDirectChats: false, autoAddNewGroups: true });
+    expect(r.includeGroups).toBe(true);
+    expect(r.denylist.map((c) => c.id)).toEqual([g(2).id, g(3).id]);
+    expect(r.includeDirectChats).toBe(false); // direct auto-add not on: count rule as before
+    expect(applied(all, r)).toEqual(new Set([g(1).id]));
+    const later = [...all, g(9), d(9)];
+    expect(applied(later, r)).toEqual(new Set([g(1).id, g(9).id])); // new group in, new DM out
+  });
+
+  it('auto-add with no chats of a type yet still switches it on', () => {
+    const r = computeRules([g(1)], new Set(), { includeGroups: true, includeDirectChats: false, autoAddNewDirectChats: true });
+    expect(r.includeDirectChats).toBe(true);
+    expect(r.includeGroups).toBe(false);
+  });
+
+  it('auto-add + nothing ticked: every known chat denylisted', () => {
+    const all = [d(1), d(2)];
+    const r = computeRules(all, new Set(), { includeGroups: true, includeDirectChats: false, autoAddNewDirectChats: true });
+    expect(r.includeDirectChats).toBe(true);
+    expect(r.denylist.map((c) => c.id)).toEqual([d(1).id, d(2).id]);
   });
 
   it('none selected -> defaults off, empty lists', () => {

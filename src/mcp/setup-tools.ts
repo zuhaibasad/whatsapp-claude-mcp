@@ -80,6 +80,12 @@ export function registerSetupUi(ctx: SetupUiCtx): void {
     z.object({ screen: z.enum(['auto', 'chats', 'disconnect']).optional().describe('"chats" opens the chat picker (when linked), "disconnect" the disconnect confirmation; default "auto"') }),
     { readOnlyHint: false },
     async (a) => {
+      // Old data and the data folder are asked about with native OS dialogs (the model cannot answer them).
+      if (deps.preflight) {
+        let stop: string | null = null;
+        try { stop = await deps.preflight(); } catch (e) { deps.log?.('preflight_failed', { error: e instanceof Error ? e.message : 'unknown' }); }
+        if (stop) return text({ needs_user: true, message: stop });
+      }
       const screen: SetupScreen = a.screen === 'chats' || a.screen === 'disconnect' ? a.screen : 'auto';
       if (uiOn()) {
         return {

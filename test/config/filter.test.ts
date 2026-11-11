@@ -9,6 +9,8 @@ function cfg(over: Partial<Config> = {}): Config {
     includeGroups: true,
     includeDirectChats: false,
     includeChannels: false,
+    autoAddNewGroups: false,
+    autoAddNewDirectChats: false,
     allowlist: [],
     denylist: [],
     myNames: [],

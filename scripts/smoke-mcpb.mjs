@@ -5,7 +5,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
@@ -119,6 +119,14 @@ try {
       r();
     });
   });
+  // OCR from the PACKAGED bundle: the pruned tesseract cores must load, in a separate process so a crash shows.
+  const ocrJs = [
+    `const { tesseractEngine } = await import(${JSON.stringify(pathToFileURL(path.join(unpacked, 'dist', 'daemon', 'media.js')).href)});`,
+    `const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');`,
+    `const e = tesseractEngine(10); await e.recognize(png); await e.close(); console.log('OCR_OK');`,
+  ].join('\n');
+  const ocr = spawnSync(process.execPath, ['--input-type=module', '-e', ocrJs], { encoding: 'utf8', timeout: 60_000 });
+  check(ocr.status === 0 && ocr.stdout.includes('OCR_OK'), `packaged OCR runs (${(ocr.stderr || '').split('\n').find((l) => /Error/.test(l)) ?? 'ok'})`);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

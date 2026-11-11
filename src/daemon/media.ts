@@ -39,7 +39,11 @@ export function tesseractEngine(idleMs = 120_000): OcrEngine {
         const { createWorker, OEM } = await import('tesseract.js');
         const req = createRequire(import.meta.url);
         const langPath = path.join(path.dirname(req.resolve('@tesseract.js-data/eng/package.json')), '4.0.0_best_int');
-        return (await createWorker('eng', OEM.LSTM_ONLY, { langPath, gzip: true, cacheMethod: 'none' })) as unknown as W;
+        // errorHandler is required: without it tesseract.js THROWS inside its worker message listener on any
+        // job failure, an uncaught exception that kills the whole MCP process. The job promise still rejects.
+        return (await createWorker('eng', OEM.LSTM_ONLY, {
+          langPath, gzip: true, cacheMethod: 'none', errorHandler: () => undefined,
+        })) as unknown as W;
       })();
       worker.catch(() => { worker = null; });
     }
@@ -60,6 +64,11 @@ export function tesseractEngine(idleMs = 120_000): OcrEngine {
   };
 }
 
+const OCR_INFLIGHT = 'ocr_inflight';
+const OCR_PAUSED_UNTIL = 'ocr_paused_until';
+const OCR_PAUSE_S = 3 * 24 * 3600;
+const OCR_MAX_FAILURES = 3;
+
 export interface MediaWorkerOptions {
   store: Store;
   getConfig: () => Config;
@@ -79,6 +88,7 @@ export class MediaWorker {
   private readonly download: MediaDownloader;
   private readonly ocr: OcrEngine;
   private readonly nowSec: () => number;
+  private ocrFailures = 0;
 
   constructor(private readonly o: MediaWorkerOptions) {
     this.download = o.download ?? baileysDownloader;
@@ -86,7 +96,24 @@ export class MediaWorker {
     this.nowSec = o.nowSec ?? (() => Math.floor(Date.now() / 1000));
   }
 
+  /**
+   * OCR is optional and runs native/WASM code that can take the whole process down in some hosts. A mark is written
+   * to the database just before each OCR call and cleared after it. Finding the mark on start means the previous
+   * process died inside OCR, so OCR stays off for OCR_PAUSE_S (images are still stored) instead of crashing every start.
+   */
+  private ocrAllowed(): boolean {
+    const { store, logger } = this.o;
+    const now = this.nowSec();
+    if (store.getMeta(OCR_INFLIGHT)) {
+      store.setMeta(OCR_INFLIGHT, '');
+      store.setMeta(OCR_PAUSED_UNTIL, String(now + OCR_PAUSE_S));
+      logger.error({}, 'previous run died during OCR; OCR paused for 3 days (images are still stored)');
+    }
+    return Number(store.getMeta(OCR_PAUSED_UNTIL) ?? 0) <= now && this.ocrFailures < OCR_MAX_FAILURES;
+  }
+
   start(): void {
+    this.ocrAllowed(); // detect a crash from the last run before anything else runs
     this.timer = setInterval(() => this.kick(), this.o.pollMs ?? 60_000);
     this.timer.unref?.();
     this.kick();
@@ -153,13 +180,21 @@ export class MediaWorker {
     }
     let ocrText: string | null = null;
     let confidence: number | null = null;
-    if (config.mediaOcr) {
+    if (config.mediaOcr && this.ocrAllowed()) {
       try {
+        store.setMeta(OCR_INFLIGHT, String(this.nowSec()));
         const r = await this.ocr.recognize(bytes);
+        store.setMeta(OCR_INFLIGHT, '');
         ocrText = r.text.trim().slice(0, MAX_OCR_TEXT) || null;
         confidence = Math.round(r.confidence * 100) / 100;
+        this.ocrFailures = 0;
       } catch (e) {
-        logger.warn({ chat: m.chatId, id: m.messageId, err: e instanceof Error ? e.name : 'unknown' }, 'ocr failed');
+        store.setMeta(OCR_INFLIGHT, '');
+        this.ocrFailures++;
+        // The engine's own error text (e.g. a WASM error), never the image text. Capped.
+        const detail = (e instanceof Error ? e.message : String(e)).replace(/\s+/g, ' ').slice(0, 160);
+        logger.warn({ chat: m.chatId, id: m.messageId, err: e instanceof Error ? e.name : typeof e, detail }, 'ocr failed');
+        if (this.ocrFailures >= OCR_MAX_FAILURES) logger.warn({}, 'OCR failed repeatedly; skipping OCR until the next start');
       }
     }
     store.saveMediaResult(m.chatId, m.messageId, {

@@ -24,7 +24,14 @@ export async function initDataFiles(
   opts: { riskAcceptedAtMs?: number } = {},
 ): Promise<Buffer> {
   fs.mkdirSync(paths.dataDir, { recursive: true });
-  const master = keyStore.get() ?? keyStore.create();
+  let master = keyStore.get();
+  if (!master) {
+    // A new key would not open an existing database: stop with a clear message instead of "wrong key".
+    if (fs.existsSync(paths.storeDb) || fs.existsSync(paths.authDb)) {
+      throw new Error('Saved data from an earlier install is in the data folder but its encryption key is gone. Say "set up WhatsApp" and choose Delete when asked about the old data.');
+    }
+    master = keyStore.create();
+  }
 
   const storeDb = openEncryptedDb(paths.storeDb, deriveDbKey(master, 'store'));
   try {

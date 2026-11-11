@@ -19,6 +19,14 @@ include_direct_chats: false
 # Channels are public broadcasts; this is off unless you turn it on.
 include_channels: false
 
+# Add NEW chats automatically (chats that did not exist when you last picked chats).
+# When on, saving a chat selection keeps that type switched on above and puts every chat you did
+# not tick on the denylist, so only chats that show up later are added on their own.
+# Pick your chats again after turning this on.
+# Direct chats: anyone who messages you for the first time would be read, so this is off unless you turn it on.
+auto_add_new_groups: false
+auto_add_new_direct_chats: false
+
 # Chats to include even when their type is switched off above.
 # Each entry is a chat name or a chat id. Names are matched case-insensitively. Example:
 #   allowlist:

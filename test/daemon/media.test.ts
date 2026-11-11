@@ -54,6 +54,29 @@ describe('MediaWorker', () => {
     await worker(() => Promise.resolve(Buffer.from('img')), { mediaOcr: false }).kick();
     expect(s.getMediaInfo(G, 'a')).toMatchObject({ status: 'done', ocrText: null, hasBytes: true });
   });
+
+  it('pauses OCR after a run that died inside it, but still stores the image', async () => {
+    s.setMeta('ocr_inflight', '999'); // the previous process never cleared its mark
+    s.insertMessage(msg('a'));
+    const w = worker(() => Promise.resolve(Buffer.from('img')));
+    w.start();
+    await w.kick();
+    await w.stop();
+    expect(s.getMediaInfo(G, 'a')).toMatchObject({ status: 'done', ocrText: null, hasBytes: true });
+    expect(s.getMeta('ocr_inflight')).toBe('');
+    expect(Number(s.getMeta('ocr_paused_until'))).toBeGreaterThan(1_000);
+  });
+
+  it('clears its mark after OCR, and stops trying after three failures', async () => {
+    let calls = 0;
+    const bad: OcrEngine = { recognize: () => { calls++; return Promise.reject('wasm abort'); }, close: () => Promise.resolve() };
+    for (const id of ['a', 'b', 'c', 'd', 'e']) s.insertMessage(msg(id));
+    const w = new MediaWorker({ store: s, getConfig: () => config, logger, download: () => Promise.resolve(Buffer.from('img')), ocr: bad, nowSec: () => 1_000 });
+    await w.kick();
+    expect(calls).toBe(3);
+    expect(s.getMeta('ocr_inflight')).toBe('');
+    expect(s.getMediaInfo(G, 'e')?.status).toBe('done');
+  });
 });
 
 describe('tesseractEngine (real, local)', () => {

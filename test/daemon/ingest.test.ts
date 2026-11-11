@@ -24,7 +24,7 @@ let store: SqliteStore;
 let ing: Ingestor;
 beforeEach(() => {
   config = {
-    retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false, includeChannels: false,
+    retentionDays: 30, timezone: 'UTC', includeGroups: true, includeDirectChats: false, includeChannels: false, autoAddNewGroups: false, autoAddNewDirectChats: false,
     allowlist: [], denylist: [], myNames: ['Zuhaib'], maxTextChars: 2000, logLevel: 'error', mediaDownload: true, mediaOcr: true, mediaMaxMb: 500,
   };
   store = new SqliteStore(new Database(':memory:'));

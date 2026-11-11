@@ -37,6 +37,8 @@ export interface Config {
   includeGroups: boolean;         // default true
   includeDirectChats: boolean;    // default false
   includeChannels: boolean;       // default false
+  autoAddNewGroups: boolean;      // default false; selection keeps include_groups on + denylists the unticked
+  autoAddNewDirectChats: boolean; // default false; same for direct chats
   allowlist: string[];            // chat JIDs or chat names (case-insensitive exact)
   denylist: string[];             // same; denylist wins over allowlist
   myNames: string[];              // names/nicknames for text mention detection

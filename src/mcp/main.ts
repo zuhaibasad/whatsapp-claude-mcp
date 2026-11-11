@@ -6,7 +6,9 @@ import { loadConfig } from '../config/index.js';
 import type { MasterKeyStore } from '../core/contracts.js';
 import { createLogger } from '../core/logger.js';
 import { resolvePaths, resolveUserPaths, type DataPaths } from '../core/paths.js';
-import { createMasterKeyStore, deriveDbKey, openEncryptedDb, DbMissingError } from '../crypto/index.js';
+import { createMasterKeyStore, deriveDbKey, openEncryptedDb, DbMissingError, napiKeyringBackend } from '../crypto/index.js';
+import { nativeDialogs } from '../host/dialog.js';
+import { preflight } from '../host/preflight.js';
 import { readLock } from '../daemon/lock.js';
 import { SqliteStore } from '../store/index.js';
 import { loadRealHost, type HostBridge } from './host.js';
@@ -29,6 +31,7 @@ export function realDeps(target: string | DataPaths, keyStore?: (root: string) =
     now: () => Date.now(),
     readLock,
     log: (event, data) => logger.info(data ?? {}, event),
+    preflight: () => preflight({ paths, keyring: napiKeyringBackend(), dialogs: nativeDialogs() }),
     openStore: ({ write }) => {
       if (!fs.existsSync(paths.storeDb)) throw new ToolError('not initialised: WhatsApp is not set up yet');
       const master = keys(paths.projectRoot).get();

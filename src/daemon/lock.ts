@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 
 export class DaemonAlreadyRunningError extends Error {
   readonly pid: number;
@@ -24,6 +25,11 @@ function isAlive(pid: number): boolean {
     // EPERM: the process exists but belongs to someone else, so it is alive.
     return (err as NodeJS.ErrnoException).code === 'EPERM';
   }
+}
+
+/** A lock written before the machine last booted cannot be live: its pid may have been reused by another program. */
+function predatesBoot(startedAt: number): boolean {
+  return startedAt < Date.now() - os.uptime() * 1000 - 60_000;
 }
 
 /** Parses the lock file. Returns null if it is missing or not valid lock JSON. */
@@ -74,7 +80,7 @@ export function acquireLock(file: string): { release(): void } {
     }
 
     const existing = parseLock(file);
-    if (existing && isAlive(existing.pid)) {
+    if (existing && !predatesBoot(existing.startedAt) && isAlive(existing.pid)) {
       throw new DaemonAlreadyRunningError(existing.pid);
     }
     // Stale or corrupt: remove it and retry the exclusive create.
@@ -91,5 +97,5 @@ export function acquireLock(file: string): { release(): void } {
 export function readLock(file: string): { pid: number; startedAt: number; alive: boolean } | null {
   const contents = parseLock(file);
   if (!contents) return null;
-  return { ...contents, alive: isAlive(contents.pid) };
+  return { ...contents, alive: !predatesBoot(contents.startedAt) && isAlive(contents.pid) };
 }

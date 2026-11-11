@@ -39,6 +39,8 @@ export interface McpDeps {
   openStore(opts: { write: boolean }): OpenedStore;
   /** Daemon lock probe. */
   readLock(lockFile: string): { pid: number; startedAt: number; alive: boolean } | null;
+  /** Runs before the setup panel opens (old-data cleanup, data folder choice). null = carry on, string = tell the user instead. */
+  preflight?(): Promise<string | null>;
   /** Event names and ids only. Never message text. */
   log?(event: string, data?: Record<string, unknown>): void;
 }

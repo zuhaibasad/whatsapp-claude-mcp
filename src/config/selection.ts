@@ -24,11 +24,16 @@ export interface TypeDefaults {
   includeGroups: boolean;
   includeDirectChats: boolean;
   includeChannels?: boolean;
+  /** Force the type default "on" so chats unknown at selection time (new chats) are included automatically. */
+  autoAddNewGroups?: boolean;
+  autoAddNewDirectChats?: boolean;
 }
 
 /**
  * Picks, per chat type, the default (on/off) that needs the fewest list entries, then lists the exceptions.
  * Ties go to "on" for groups and "off" for direct chats and channels. A type with no chats keeps `current`.
+ * With autoAddNewGroups / autoAddNewDirectChats the default for that type is always "on" (unticked chats go
+ * on the denylist), so a chat first seen after the selection is included.
  * Applying `isChatIncluded` with the result gives exactly `selectedIds` (ids not in `all` are ignored).
  */
 export function computeRules(
@@ -38,18 +43,18 @@ export function computeRules(
 ): SelectionRules {
   const allowlist: ChatChoice[] = [];
   const denylist: ChatChoice[] = [];
-  const decide = (type: ChatType, keep: boolean): boolean => {
+  const decide = (type: ChatType, keep: boolean, forceOn = false): boolean => {
     const chats = all.filter((c) => c.type === type);
-    if (chats.length === 0) return keep;
+    if (chats.length === 0) return keep || forceOn;
     const selected = chats.filter((c) => selectedIds.has(c.id));
     const twice = selected.length * 2;
-    const on = twice > chats.length || (twice === chats.length && type === 'group');
+    const on = forceOn || twice > chats.length || (twice === chats.length && type === 'group');
     if (on) denylist.push(...chats.filter((c) => !selectedIds.has(c.id)));
     else allowlist.push(...selected);
     return on;
   };
-  const includeGroups = decide('group', current.includeGroups);
-  const includeDirectChats = decide('direct', current.includeDirectChats);
+  const includeGroups = decide('group', current.includeGroups, current.autoAddNewGroups);
+  const includeDirectChats = decide('direct', current.includeDirectChats, current.autoAddNewDirectChats);
   const includeChannels = decide('channel', current.includeChannels ?? false);
   return { includeGroups, includeDirectChats, includeChannels, allowlist, denylist };
 }
