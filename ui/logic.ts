@@ -190,7 +190,7 @@ export function doneSummaryLine(c: SelectionCounts | null): string {
 }
 
 // sendDirect is never reachable from the setup UI.
-export type UiOpName = Exclude<SetupOpName, 'waitForSync' | 'acceptRisk' | 'diagnose' | 'sendDirect'>;
+export type UiOpName = Exclude<SetupOpName, 'waitForSync' | 'acceptRisk' | 'diagnose' | 'sendDirect' | 'previewDirect'>;
 
 /** Servers may return the value bare or wrapped (structuredContent must be an object, so arrays are wrapped). */
 export function unwrap(op: UiOpName, payload: unknown): unknown {

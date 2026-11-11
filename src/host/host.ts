@@ -117,7 +117,8 @@ export function createHost(paths: DataPaths, over: Partial<HostDeps> = {}): Host
     waitForSync: wrap((o) => (ms: number) => o.waitForSync(ms)),
     disconnect: wrap((o) => (opts: { keepData: boolean; nonce?: string }) => o.disconnect(opts)),
     diagnose: wrap((o) => () => o.diagnose()),
-    sendDirect: wrap((o) => (a: { ref: string; text: string }) => o.sendDirect(a)),
+    sendDirect: wrap((o) => (a: { ref: string; text: string; approval?: string }) => o.sendDirect(a)),
+    previewDirect: wrap((o) => (a: { ref: string; text: string }) => o.previewDirect(a)),
     mintNonce: wrap((o) => (kind?: 'accept' | 'disconnect') => o.mintNonce(kind)),
     openSetup: wrap((o) => (screen?: SetupScreen) => o.openSetup(screen)),
   };

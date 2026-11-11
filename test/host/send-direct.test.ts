@@ -166,6 +166,22 @@ describe('sendDirect', () => {
     expect(asked).toHaveLength(2);
   });
 
+  it('an in-Claude approval from previewDirect sends without the OS dialog, once, for that exact text only', async () => {
+    const { h, c } = await linkedWithPost();
+    setConfig('allow_sending: true');
+    const p = await h.ops.previewDirect({ ref: `${GROUP}/p1`, text: '  rate?  ' });
+    expect(p).toMatchObject({ text: 'rate?', where: null });
+    expect(p.to).toContain('+923001234567');
+    expect(c.sendDirectText).not.toHaveBeenCalled(); // preview never sends
+    const other = await h.ops.previewDirect({ ref: `${GROUP}/p1`, text: 'rate?' });
+    await expect(h.ops.sendDirect({ ref: `${GROUP}/p1`, text: 'something else', approval: other.approval })).rejects.toThrow(/approval/);
+    await expect(h.ops.sendDirect({ ref: `${GROUP}/p1`, text: 'rate?', approval: other.approval })).rejects.toThrow(/approval/); // consumed
+    await expect(h.ops.sendDirect({ ref: `${GROUP}/p1`, text: 'rate?', approval: 'made-up' })).rejects.toThrow(/approval/);
+    expect((await h.ops.sendDirect({ ref: `${GROUP}/p1`, text: 'rate?', approval: p.approval })).sent).toBe(true);
+    expect(asked).toEqual([]); // no OS dialog
+    expect(c.sendDirectText).toHaveBeenCalledExactlyOnceWith(POSTER, 'rate?');
+  });
+
   it('rate-limits: 20 s between messages', async () => {
     const { h, c } = await linkedWithPost();
     setConfig('allow_sending: true');

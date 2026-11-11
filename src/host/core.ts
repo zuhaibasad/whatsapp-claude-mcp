@@ -1,4 +1,5 @@
 // The lock holder's brain: databases, collector and the setup state machine (SetupOps).
+import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import QRCode from 'qrcode';
@@ -7,7 +8,7 @@ import { loadConfig } from '../config/index.js';
 import type { ChatRow, MasterKeyStore } from '../core/contracts.js';
 import type { Logger } from '../core/logger.js';
 import type { DataPaths } from '../core/paths.js';
-import type { CollectorState, Diagnosis, SelectionSummary, SendDirectResult, SetupScreen, SetupState, SetupStep } from '../core/service.js';
+import type { CollectorState, Diagnosis, SelectionSummary, SendDirectResult, SendPreview, SetupScreen, SetupState, SetupStep } from '../core/service.js';
 import { runLinkSession } from '../daemon/link.js';
 import { openDaemonDbs, startCollector, type CollectorHandle, type OpenedDbs } from '../daemon/runner.js';
 import { OneTimeStore } from './auth.js';
@@ -25,6 +26,8 @@ const SEND_MIN_GAP_MS = 20_000;
 const SEND_DAILY_LIMIT = 30;
 const SEND_CONFIRM_TIMEOUT_MS = 90_000;
 const SEND_COUNT_META = 'direct_sent_today';
+const SEND_APPROVAL_TTL_MS = 3 * 60_000;
+const approvalKey = (ref: string, text: string): string => createHash('sha256').update(`${ref}\0${text}`).digest('hex');
 
 export class HolderCore implements HostOps {
   readonly nonces: OneTimeStore;
@@ -39,6 +42,8 @@ export class HolderCore implements HostOps {
   private notice: string | null = null; // non-fatal message for the UI (e.g. offline disconnect)
   private disconnecting = false;
   private sending = false;
+  /** previewDirect approvals: secret -> hash of ref+text, expiry. Single use, in memory only. */
+  private approvals = new Map<string, { key: string; exp: number }>();
   private lastSentAt = 0;
   private port = 0;
 
@@ -235,11 +240,74 @@ export class HolderCore implements HostOps {
   }
 
   /**
-   * The only user-facing send. Every guard lives here, not in the tool text: allow_sending on, recipient = the author
-   * of a stored message (never a group/channel, never yourself), text only and capped, rate limits, and a native OS
-   * dialog the model cannot answer. Never logs the text.
+   * Validates a send and returns what the confirmation must show, plus a single-use approval bound to this exact
+   * ref + text. The MCP server shows it inside Claude (elicitation) and, if the user accepts, passes the approval to
+   * sendDirect instead of the OS dialog. Sends nothing.
    */
-  async sendDirect(opts: { ref: string; text: string }): Promise<SendDirectResult> {
+  async previewDirect(opts: { ref: string; text: string }): Promise<SendPreview> {
+    const c = this.checkSend(opts);
+    const approval = randomBytes(18).toString('base64url');
+    const t = this.deps.now();
+    for (const [k, v] of this.approvals) if (v.exp <= t) this.approvals.delete(k);
+    this.approvals.set(approval, { key: approvalKey(opts.ref, c.text), exp: t + SEND_APPROVAL_TTL_MS });
+    return { to: c.to, where: c.where, text: c.text, approval };
+  }
+
+  /**
+   * The only user-facing send. Every guard lives here, not in the tool text: allow_sending on, recipient = the author
+   * of a stored message (never a group/channel, never yourself), text only and capped, rate limits, and the user's
+   * confirmation, which the model cannot give: either an approval from previewDirect (the user accepted inside
+   * Claude) or, without one, a native OS dialog. Never logs the text.
+   */
+  async sendDirect(opts: { ref: string; text: string; approval?: string }): Promise<SendDirectResult> {
+    const { collector, dbs, text, jid, phoneJid, lid, name, to, where, day, sentToday } = this.checkSend(opts);
+    let approved = false;
+    if (opts.approval !== undefined) {
+      const a = this.approvals.get(opts.approval);
+      this.approvals.delete(opts.approval);
+      if (!a || a.exp <= this.deps.now() || a.key !== approvalKey(opts.ref, text)) {
+        throw new HostError(403, 'the approval does not match this message or has expired: nothing was sent');
+      }
+      approved = true;
+    }
+    if (this.sending) throw new HostError(409, 'another message is waiting for confirmation');
+    this.sending = true;
+    try {
+      if (!approved) {
+        const ok = await this.deps.dialogs.confirm(
+          'ChatAI: send this WhatsApp message?',
+          `Claude wants to send a PRIVATE WhatsApp message from your number.\n\nTo: ${to}${where ? `\n(they posted in: ${where})` : ''}\n\nMessage:\n${text}\n\nSend it?`,
+          { yes: 'Send', no: 'Cancel' },
+          SEND_CONFIRM_TIMEOUT_MS,
+        );
+        if (ok === null) return { sent: false, to, reason: 'no_dialog' };
+        if (!ok) return { sent: false, to, reason: 'cancelled' };
+      }
+      await collector.sendDirectText(jid, text);
+      this.lastSentAt = this.deps.now();
+      dbs.store.setMeta(SEND_COUNT_META, `${day} ${sentToday + 1}`);
+      this.logger.info({ to: jid, ok: true, confirmed: approved ? 'claude' : 'dialog' }, 'direct message sent');
+      // Read the reply: include the 1-to-1 chat under each id WhatsApp may use for it.
+      const chats: ChatChoice[] = [...new Set([phoneJid, lid].filter((x): x is string => !!x))].map((id) => ({ id, name, type: 'direct' }));
+      let tracking = false;
+      try {
+        addToAllowlist(this.paths, chats, `messaged ${day}`);
+        for (const c of chats) dbs.store.upsertChat({ id: c.id, type: 'direct', included: true, ...(name ? { name } : {}) });
+        // Apply now: otherwise a chat update arriving before the 30 s config poll would re-exclude the chat
+        // (from the old config) and a quick reply would be dropped.
+        collector.reloadConfig();
+        tracking = true;
+      } catch (e) {
+        this.logger.warn({ err: msg(e) }, 'could not add the messaged chat to the allowlist');
+      }
+      return { sent: true, to, reply_tracking: tracking };
+    } finally {
+      this.sending = false;
+    }
+  }
+
+  /** Every send rule except the confirmation. Throws HostError with a user-readable reason. */
+  private checkSend(opts: { ref: string; text: string }) {
     const config = loadConfig(this.paths).config;
     if (!config.allowSending) {
       throw new HostError(403, 'sending is off: set allow_sending: true in config.yaml, then restart Claude');
@@ -265,7 +333,6 @@ export class HolderCore implements HostOps {
     const phone = phoneJid ? `+${phoneJid.split('@')[0]}` : null;
     const to = [name, phone].filter(Boolean).join(' ') || 'this contact (no phone number shared)';
 
-    if (this.sending) throw new HostError(409, 'another message is waiting for confirmation');
     const now = this.deps.now();
     if (now - this.lastSentAt < SEND_MIN_GAP_MS) {
       throw new HostError(429, `wait ${Math.ceil((SEND_MIN_GAP_MS - (now - this.lastSentAt)) / 1000)} s before the next message`);
@@ -274,39 +341,8 @@ export class HolderCore implements HostOps {
     const [d, n] = (dbs.store.getMeta(SEND_COUNT_META) ?? '').split(' ');
     const sentToday = d === day ? Number(n) || 0 : 0;
     if (sentToday >= SEND_DAILY_LIMIT) throw new HostError(429, `the daily limit of ${SEND_DAILY_LIMIT} messages is reached`);
-
-    this.sending = true;
-    try {
-      const where = dbs.store.getChat(m.chatId)?.name;
-      const ok = await this.deps.dialogs.confirm(
-        'ChatAI: send this WhatsApp message?',
-        `Claude wants to send a PRIVATE WhatsApp message from your number.\n\nTo: ${to}${where ? `\n(they posted in: ${where})` : ''}\n\nMessage:\n${text}\n\nSend it?`,
-        { yes: 'Send', no: 'Cancel' },
-        SEND_CONFIRM_TIMEOUT_MS,
-      );
-      if (ok === null) return { sent: false, to, reason: 'no_dialog' };
-      if (!ok) return { sent: false, to, reason: 'cancelled' };
-      await collector.sendDirectText(jid, text);
-      this.lastSentAt = this.deps.now();
-      dbs.store.setMeta(SEND_COUNT_META, `${day} ${sentToday + 1}`);
-      this.logger.info({ to: jid, ok: true }, 'direct message sent');
-      // Read the reply: include the 1-to-1 chat under each id WhatsApp may use for it.
-      const chats: ChatChoice[] = [...new Set([phoneJid, lid].filter((x): x is string => !!x))].map((id) => ({ id, name, type: 'direct' }));
-      let tracking = false;
-      try {
-        addToAllowlist(this.paths, chats, `messaged ${day}`);
-        for (const c of chats) dbs.store.upsertChat({ id: c.id, type: 'direct', included: true, ...(name ? { name } : {}) });
-        // Apply now: otherwise a chat update arriving before the 30 s config poll would re-exclude the chat
-        // (from the old config) and a quick reply would be dropped.
-        collector.reloadConfig();
-        tracking = true;
-      } catch (e) {
-        this.logger.warn({ err: msg(e) }, 'could not add the messaged chat to the allowlist');
-      }
-      return { sent: true, to, reply_tracking: tracking };
-    } finally {
-      this.sending = false;
-    }
+    const where = dbs.store.getChat(m.chatId)?.name ?? null;
+    return { collector, dbs, text, jid, phoneJid, lid, name, to, where, day, sentToday };
   }
 
   async diagnose(): Promise<Diagnosis> {

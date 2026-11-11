@@ -28,8 +28,9 @@ auto_add_new_groups: false
 auto_add_new_direct_chats: false
 
 # Let Claude send a private (1-to-1) text to someone who posted in a chat you read, e.g. to ask a price.
-# Every message needs your OK in a Windows/macOS pop-up that shows the exact text and recipient; Claude
-# cannot click it. Never sends to groups or channels. At most 1 message per 20 seconds and 30 per day.
+# Every message needs your OK, showing the exact text and recipient: a prompt inside Claude when Claude
+# supports it, otherwise a Windows/macOS pop-up. Claude (the AI) cannot answer either one.
+# Never sends to groups or channels. At most 1 message per 20 seconds and 30 per day.
 # WhatsApp may ban numbers that send through unofficial apps: use it for a few personal messages only.
 # Restart Claude after changing this.
 allow_sending: false

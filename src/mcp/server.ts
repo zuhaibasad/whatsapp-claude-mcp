@@ -5,6 +5,7 @@ import { findChatNote, loadChatNotes, loadConfig } from '../config/index.js';
 import { computeRules, currentSelection, writeSelection, type ChatChoice } from '../config/selection.js';
 import type { ChatNote, Config, Store } from '../core/contracts.js';
 import { resolvePaths, type DataPaths } from '../core/paths.js';
+import type { SendDirectResult, SendPreview } from '../core/service.js';
 import type { Chat, ItemCategory, MediaInfo } from '../core/types.js';
 import { isoInZone, itemRow, writeItemsExport, ExportError } from '../export/index.js';
 import type { HostBridge } from './host.js';
@@ -50,6 +51,9 @@ const MAX_LIMIT = 1000;
 const DEFAULT_NEW_LIMIT = 300;
 const MAX_MEDIA_REFS = 20;
 const MAX_INLINE_IMAGES = 5;
+/** In-Claude send confirmation: how long to wait for the user, and the fastest plausible human answer. */
+const SEND_ELICIT_TIMEOUT_MS = 90_000;
+const SEND_ELICIT_MIN_HUMAN_MS = 1_200;
 
 export { clip };
 
@@ -797,20 +801,51 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       }
     });
 
+  /**
+   * Confirmation inside Claude via MCP elicitation. 'unavailable' when the client did not declare elicitation,
+   * errored, timed out, or answered faster than a person could (some clients auto-decline without showing anything).
+   */
+  const confirmInClaude = async (p: SendPreview): Promise<'accept' | 'decline' | 'unavailable'> => {
+    const low = server.server;
+    if (!low.getClientCapabilities()?.elicitation) return 'unavailable';
+    const t0 = Date.now();
+    try {
+      const r = await low.elicitInput({
+        mode: 'form',
+        message: `Send this PRIVATE WhatsApp message from your number?\n\nTo: ${p.to}${p.where ? `\n(they posted in: ${p.where})` : ''}\n\nMessage:\n${p.text}\n\nAccept sends it. Decline or close: nothing is sent.`,
+        requestedSchema: { type: 'object', properties: {} },
+      }, { timeout: SEND_ELICIT_TIMEOUT_MS });
+      if (r.action === 'accept') return 'accept';
+      return Date.now() - t0 < SEND_ELICIT_MIN_HUMAN_MS ? 'unavailable' : 'decline';
+    } catch {
+      return 'unavailable';
+    }
+  };
+
   // Opt-in (config allow_sending, read at startup): absent from tools/list unless the user turned sending on.
   let sendingOn = false;
   try { sendingOn = loadConfig(paths).config.allowSending; } catch { /* config errors surface in the other tools */ }
   if (sendingOn) {
     plain('whatsapp_send_direct',
-      'Send a PRIVATE 1-to-1 text to the person who wrote a message (e.g. ask a stock poster for the price). Only when the user asks you to message someone. One message per call. The user must click Send in a pop-up on this PC; report "sent" only if the result says sent: true. Never sends to groups.',
+      'Send a PRIVATE 1-to-1 text to the person who wrote a message (e.g. ask a stock poster for the price). Only when the user asks you to message someone. One message per call. The user confirms it (a prompt in Claude, else a pop-up on this PC); report "sent" only if the result says sent: true. Never sends to groups.',
       z.object({
         ref: z.string().describe('chat_id/message_id of a message the person wrote'),
         text: z.string().min(1).max(1000).describe('the exact message, in the user\'s language'),
       }),
       { readOnlyHint: false },
       async (a) => {
-        const r = await (await needHost()).ops().sendDirect({ ref: String(a.ref), text: String(a.text) });
-        deps.log?.('tool', { name: 'whatsapp_send_direct', ok: true, sent: r.sent });
+        const ops = (await needHost()).ops();
+        const ref = String(a.ref);
+        const p = await ops.previewDirect({ ref, text: String(a.text) });
+        // Ask inside Claude first (MCP elicitation: the user answers, not the model). If Claude cannot show it,
+        // fall back to the native OS pop-up, which sendDirect shows when no approval is passed.
+        const answer = await confirmInClaude(p);
+        const r: SendDirectResult = answer === 'accept'
+          ? await ops.sendDirect({ ref, text: p.text, approval: p.approval })
+          : answer === 'decline'
+            ? { sent: false, to: p.to, reason: 'cancelled' }
+            : await ops.sendDirect({ ref, text: p.text });
+        deps.log?.('tool', { name: 'whatsapp_send_direct', ok: true, sent: r.sent, confirm: answer === 'unavailable' ? 'os_dialog' : 'claude' });
         const note = r.sent
           ? (r.reply_tracking ? 'Sent. Their 1-to-1 chat is now read, so their reply will show up in whatsapp_read.' : 'Sent.')
           : r.reason === 'no_dialog' ? 'Not sent: no confirmation pop-up could be shown on this computer.' : 'Not sent: the user cancelled or did not answer.';

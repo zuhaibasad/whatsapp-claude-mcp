@@ -76,7 +76,21 @@ export interface SetupOps {
    * Sends `text` privately to the person who wrote message `ref` ("<chatId>/<messageId>"), only after the user clicks
    * Yes in a native OS dialog showing the recipient and the exact text. Off unless config allow_sending is true.
    */
-  sendDirect(opts: { ref: string; text: string }): Promise<SendDirectResult>;
+  sendDirect(opts: { ref: string; text: string; approval?: string }): Promise<SendDirectResult>;
+  /**
+   * Checks a send without sending and returns what to show the user, plus a single-use approval (3 min) bound to
+   * this ref + text. Only the MCP server uses it, after the user accepted a confirmation inside Claude.
+   */
+  previewDirect(opts: { ref: string; text: string }): Promise<SendPreview>;
+}
+
+export interface SendPreview {
+  to: string;
+  /** Name of the chat where they posted, if known. */
+  where: string | null;
+  /** The text that will be sent (trimmed). */
+  text: string;
+  approval: string;
 }
 
 export interface SendDirectResult {
