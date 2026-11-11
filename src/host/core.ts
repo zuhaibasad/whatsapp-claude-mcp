@@ -296,6 +296,9 @@ export class HolderCore implements HostOps {
       try {
         addToAllowlist(this.paths, chats, `messaged ${day}`);
         for (const c of chats) dbs.store.upsertChat({ id: c.id, type: 'direct', included: true, ...(name ? { name } : {}) });
+        // Apply now: otherwise a chat update arriving before the 30 s config poll would re-exclude the chat
+        // (from the old config) and a quick reply would be dropped.
+        collector.reloadConfig();
         tracking = true;
       } catch (e) {
         this.logger.warn({ err: msg(e) }, 'could not add the messaged chat to the allowlist');

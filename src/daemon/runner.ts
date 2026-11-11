@@ -113,6 +113,8 @@ export interface CollectorHandle {
   state(): CollectorState;
   /** Subscribes to state changes; returns an unsubscribe function. */
   onState(listener: (s: CollectorState) => void): () => void;
+  /** Re-reads config.yaml now (if it changed) and re-applies the chat filter, instead of waiting for the 30 s poll. */
+  reloadConfig(): void;
   /** User-confirmed text to a direct chat (see HolderCore.sendDirect). Rejects unless the collector is live. */
   sendDirectText(jid: string, text: string): Promise<{ id: string | null }>;
 }
@@ -425,6 +427,7 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
+    reloadConfig: checkConfig,
     sendDirectText: (jid, text) => {
       if (stopped || state !== 'live') return Promise.reject(new Error(`WhatsApp is ${state} right now: try again when it is live`));
       return client.sendDirectText(jid, text);

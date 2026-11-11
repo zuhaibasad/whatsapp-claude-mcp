@@ -153,6 +153,19 @@ describe('sendDirect', () => {
     expect(asked).toEqual([]);
   });
 
+  it('a reply arriving right after the send is kept (no wait for the 30 s config poll)', async () => {
+    const { h, c } = await linkedWithPost();
+    setConfig('allow_sending: true');
+    expect((await h.ops.sendDirect({ ref: `${GROUP}/p1`, text: 'rate?' })).sent).toBe(true);
+    // WhatsApp announces the 1-to-1 chat, then the reply lands, all within a second.
+    c.emit('chats', [{ id: POSTER, type: 'direct', unreadCount: 1, lastActivityAt: Math.floor(Date.now() / 1000) }]);
+    c.emit('messages', [raw({ id: 'r1', chatId: POSTER, text: '450 per box' })]);
+    now += 21_000;
+    // The reply is stored only if its chat stayed included: then it is a valid ref to answer.
+    await h.ops.sendDirect({ ref: `${POSTER}/r1`, text: 'ok' });
+    expect(asked).toHaveLength(2);
+  });
+
   it('rate-limits: 20 s between messages', async () => {
     const { h, c } = await linkedWithPost();
     setConfig('allow_sending: true');
