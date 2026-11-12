@@ -27,7 +27,41 @@ const SEND_DAILY_LIMIT = 30;
 const SEND_CONFIRM_TIMEOUT_MS = 90_000;
 const SEND_COUNT_META = 'direct_sent_today';
 const SEND_APPROVAL_TTL_MS = 3 * 60_000;
-const approvalKey = (ref: string, text: string): string => createHash('sha256').update(`${ref}\0${text}`).digest('hex');
+const approvalKey = (jid: string, text: string): string => createHash('sha256').update(`${jid}\0${text}`).digest('hex');
+const digitsOf = (s: string): string => s.replace(/\D/g, '');
+
+/**
+ * An existing 1-to-1 chat by id, phone (digits; a leading 0 is read as 92) or name (exact, else a unique fragment).
+ * Throws on no match or more than one match; never guesses between people.
+ */
+export function findDirectChat(rows: ChatRow[], query: string): ChatRow {
+  const q = query.trim();
+  if (q === '') throw new HostError(400, 'say who to message: a 1-to-1 chat name or phone number, or a message ref');
+  const direct = rows.filter((r) => r.type === 'direct');
+  const byId = direct.find((r) => r.id.toLowerCase() === q.toLowerCase());
+  if (byId) return byId;
+  let pool: ChatRow[];
+  if (/^[\d\s+\-().]+$/.test(q)) {
+    const d = digitsOf(q).replace(/^0/, '92');
+    pool = d.length >= 7 ? direct.filter((r) => r.phone !== null && digitsOf(r.phone) === d) : [];
+  } else {
+    const needle = q.toLowerCase();
+    const exact = direct.filter((r) => (r.name ?? '').trim().toLowerCase() === needle);
+    pool = exact.length > 0 ? exact : direct.filter((r) => (r.name ?? '').toLowerCase().includes(needle));
+  }
+  // One person can have two chat rows (phone JID and LID, same phone): count people, not rows.
+  const people = new Map<string, ChatRow>();
+  for (const r of pool) {
+    const key = r.phone ?? r.id;
+    const seen = people.get(key);
+    if (!seen || (!seen.id.endsWith('@s.whatsapp.net') && r.id.endsWith('@s.whatsapp.net'))) people.set(key, r);
+  }
+  pool = [...people.values()];
+  if (pool.length === 1) return pool[0] as ChatRow;
+  if (pool.length === 0) throw new HostError(404, `no 1-to-1 chat matches "${q}": only people you already have a WhatsApp chat with can be messaged`);
+  const sample = pool.slice(0, 5).map((r) => `${r.name ?? '(no name)'}${r.phone ? ` ${r.phone}` : ''}`).join('; ');
+  throw new HostError(409, `"${q}" matches ${pool.length} chats (${sample}${pool.length > 5 ? '; …' : ''}): use the phone number`);
+}
 
 export class HolderCore implements HostOps {
   readonly nonces: OneTimeStore;
@@ -249,7 +283,8 @@ export class HolderCore implements HostOps {
     const approval = randomBytes(18).toString('base64url');
     const t = this.deps.now();
     for (const [k, v] of this.approvals) if (v.exp <= t) this.approvals.delete(k);
-    this.approvals.set(approval, { key: approvalKey(opts.ref, c.text), exp: t + SEND_APPROVAL_TTL_MS });
+    // Bound to the resolved recipient, not the input: a name must not resolve to someone else at send time.
+    this.approvals.set(approval, { key: approvalKey(c.jid, c.text), exp: t + SEND_APPROVAL_TTL_MS });
     return { to: c.to, where: c.where, text: c.text, approval };
   }
 
@@ -265,7 +300,7 @@ export class HolderCore implements HostOps {
     if (opts.approval !== undefined) {
       const a = this.approvals.get(opts.approval);
       this.approvals.delete(opts.approval);
-      if (!a || a.exp <= this.deps.now() || a.key !== approvalKey(opts.ref, text)) {
+      if (!a || a.exp <= this.deps.now() || a.key !== approvalKey(jid, text)) {
         throw new HostError(403, 'the approval does not match this message or has expired: nothing was sent');
       }
       approved = true;
@@ -319,17 +354,32 @@ export class HolderCore implements HostOps {
     if (text === '') throw new HostError(400, 'the message text is empty');
     if (text.length > SEND_MAX_CHARS) throw new HostError(400, `the message is longer than ${SEND_MAX_CHARS} characters`);
 
+    // Recipient: the author of a stored message (ref "chat_id/message_id"), or an existing 1-to-1 chat (id, name or
+    // phone). Never a typed number that has no chat, never a group or channel.
     const slash = opts.ref.indexOf('/');
     const m = slash > 0 ? dbs.store.getMessage(opts.ref.slice(0, slash), opts.ref.slice(slash + 1)) : null;
-    if (!m) throw new HostError(404, `no stored message with ref ${opts.ref}: use the ref of a message from a read chat`);
-    if (m.isFromMe) throw new HostError(400, 'that message is yours: pick a message the other person wrote');
-    if (!DIRECT_JID.test(m.senderId)) throw new HostError(400, 'the author of that message cannot be messaged directly');
-    const contact = dbs.store.getContact(m.senderId);
-    const phoneJid = contact?.phoneJid ?? (m.senderId.endsWith('@s.whatsapp.net') ? m.senderId : null);
-    const lid = contact?.lid ?? (m.senderId.endsWith('@lid') ? m.senderId : null);
+    let targetId: string;
+    let shownName: string | null = null;
+    let where: string | null = null;
+    if (m) {
+      if (m.isFromMe) throw new HostError(400, 'that message is yours: pick a message the other person wrote');
+      targetId = m.senderId;
+      shownName = m.senderName;
+      where = dbs.store.getChat(m.chatId)?.name ?? null;
+    } else if (slash > 0 && opts.ref.includes('@') && opts.ref.indexOf('@') < slash) {
+      throw new HostError(404, `no stored message with ref ${opts.ref}: use the ref of a message from a read chat, or a 1-to-1 chat name or number`);
+    } else {
+      const row = findDirectChat(buildChatRows(dbs.store, config), opts.ref);
+      targetId = row.id;
+      shownName = row.name;
+    }
+    if (!DIRECT_JID.test(targetId)) throw new HostError(400, 'that person cannot be messaged directly');
+    const contact = dbs.store.getContact(targetId);
+    const phoneJid = contact?.phoneJid ?? (targetId.endsWith('@s.whatsapp.net') ? targetId : null);
+    const lid = contact?.lid ?? (targetId.endsWith('@lid') ? targetId : null);
     if (phoneJid && phoneJid === dbs.store.getAccount()?.id) throw new HostError(400, 'that is your own number');
-    const jid = phoneJid ?? m.senderId;
-    const name = contact?.savedName ?? m.senderName ?? contact?.pushName ?? contact?.verifiedName ?? null;
+    const jid = phoneJid ?? targetId;
+    const name = contact?.savedName ?? shownName ?? contact?.pushName ?? contact?.verifiedName ?? null;
     const phone = phoneJid ? `+${phoneJid.split('@')[0]}` : null;
     const to = [name, phone].filter(Boolean).join(' ') || 'this contact (no phone number shared)';
 
@@ -341,7 +391,6 @@ export class HolderCore implements HostOps {
     const [d, n] = (dbs.store.getMeta(SEND_COUNT_META) ?? '').split(' ');
     const sentToday = d === day ? Number(n) || 0 : 0;
     if (sentToday >= SEND_DAILY_LIMIT) throw new HostError(429, `the daily limit of ${SEND_DAILY_LIMIT} messages is reached`);
-    const where = dbs.store.getChat(m.chatId)?.name ?? null;
     return { collector, dbs, text, jid, phoneJid, lid, name, to, where, day, sentToday };
   }
 

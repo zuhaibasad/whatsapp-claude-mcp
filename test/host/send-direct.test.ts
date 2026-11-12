@@ -192,3 +192,61 @@ describe('sendDirect', () => {
     expect(c.sendDirectText).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('sendDirect to an existing 1-to-1 chat (no message ref)', () => {
+  const A = '923331112222@s.whatsapp.net';
+  const B = '923334445555@s.whatsapp.net';
+  const withChats = async () => {
+    const r = await linkedWithPost();
+    const t = Math.floor(Date.now() / 1000);
+    r.c.emit('chats', [
+      { id: A, type: 'direct', name: 'Ali Traders', lastActivityAt: t },
+      { id: B, type: 'direct', name: 'Ali Khan', lastActivityAt: t },
+      { id: '999@s.whatsapp.net', type: 'direct', name: 'Me myself', lastActivityAt: t },
+      { id: GROUP, type: 'group', name: 'Pharma Stock', lastActivityAt: t },
+    ]);
+    await until(async () => (await r.h.ops.chatRows()).some((x) => x.id === B));
+    setConfig('allow_sending: true');
+    return r;
+  };
+
+  it('finds the chat by exact name or by phone (leading 0 = 92) and shows the number in the dialog', async () => {
+    const { h, c } = await withChats();
+    expect((await h.ops.sendDirect({ ref: 'Ali Traders', text: 'Salam' })).sent).toBe(true);
+    expect(asked[0]).toContain('+923331112222');
+    expect(asked[0]).not.toContain('posted in');
+    now += 21_000;
+    expect((await h.ops.sendDirect({ ref: '0333 444 5555', text: 'Salam' })).sent).toBe(true);
+    expect(c.sendDirectText.mock.calls.map((x) => x[0])).toEqual([A, B]);
+  });
+
+  it('refuses ambiguous names, groups, unknown numbers and your own number, before asking', async () => {
+    const { h, c } = await withChats();
+    await expect(h.ops.sendDirect({ ref: 'Ali', text: 'x' })).rejects.toThrow(/matches 2 chats/);
+    await expect(h.ops.sendDirect({ ref: 'Pharma Stock', text: 'x' })).rejects.toThrow(/no 1-to-1 chat/);
+    await expect(h.ops.sendDirect({ ref: GROUP, text: 'x' })).rejects.toThrow(/no 1-to-1 chat/);
+    await expect(h.ops.sendDirect({ ref: '+92 300 0000000', text: 'x' })).rejects.toThrow(/no 1-to-1 chat/);
+    await expect(h.ops.sendDirect({ ref: 'Me myself', text: 'x' })).rejects.toThrow(/own number/);
+    expect(asked).toEqual([]);
+    expect(c.sendDirectText).not.toHaveBeenCalled();
+  });
+
+  it('one person with a phone chat and a LID chat is one match, sent to the phone JID', async () => {
+    const { h, c } = await withChats();
+    const LID = '77001@lid';
+    c.emit('contacts', [{ id: A, lid: LID, savedName: 'Ali Traders' }]);
+    c.emit('chats', [{ id: LID, type: 'direct', name: 'Ali Traders', lastActivityAt: Math.floor(Date.now() / 1000) }]);
+    await until(async () => (await h.ops.chatRows()).some((x) => x.id === LID && x.phone !== null));
+    expect((await h.ops.sendDirect({ ref: 'Ali Traders', text: 'Salam' })).sent).toBe(true);
+    now += 21_000;
+    expect((await h.ops.sendDirect({ ref: '03331112222', text: 'again' })).sent).toBe(true);
+    expect(c.sendDirectText.mock.calls.map((x) => x[0])).toEqual([A, A]);
+  });
+
+  it('an approval for one person cannot send to another', async () => {
+    const { h, c } = await withChats();
+    const p = await h.ops.previewDirect({ ref: 'Ali Traders', text: 'rate?' });
+    await expect(h.ops.sendDirect({ ref: 'Ali Khan', text: 'rate?', approval: p.approval })).rejects.toThrow(/approval/);
+    expect(c.sendDirectText).not.toHaveBeenCalled();
+  });
+});

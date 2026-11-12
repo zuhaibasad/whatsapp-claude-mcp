@@ -5,6 +5,12 @@ updated: 2026-11-11
 
 # HANDOFF: read this first (auto-injected at session start)
 
+## 0.5.1 (committed 2026-11-12, NOT pushed, NOT released): DMs by chat, leads export, download page
+- `whatsapp_send_direct` `ref` also takes an existing 1-to-1 chat (id, phone with 0→92, exact/unique name). Ambiguous = refused; phone+LID rows of one person count once; approval bound to resolved JID. **Cold messages to numbers with no chat: user decided to leave out (2026-11-12).**
+- Items category `lead` + `category` filter (list/export, CLI `--category`). `category: "lead"` export = leads sheet (contact, phone `+92 300 1234567` so Excel keeps text, chat, signal, message). Contact join matches id/phone/LID.
+- Distribution: Desktop directory no longer accepts MCPB (plugin bundles only run in Code/Cowork), so the user chose a download page + GitHub release. `.github/workflows/release.yml` (tag `v*` → both bundles, also stable names `chatai-<os>.mcpb`), `pages.yml` deploys `site/` only (never docs/). Release notes in `release-notes/v<ver>.md`.
+- To ship: push main, enable Pages (source: GitHub Actions), push tag `v0.5.1`. Real send still untested on WhatsApp.
+
 ## 0.5.0 (committed 2026-11-11, NOT pushed, NOT released): opt-in private messages
 - **Install file:** `C:\tempfolder\chatai-0.5.0-windows.mcpb`. Real send NOT yet tested against WhatsApp: test on the user's own PC with a consenting contact before giving it to the friend (the friend should get 0.4.3 until then).
 - `allow_sending: true` (default false, restart Claude) lists `whatsapp_send_direct {ref, text}`. Gate in `HolderCore.sendDirect`: author of stored message only, direct JIDs only, ≤1000 chars, 20 s gap, 30/day (meta `direct_sent_today`), native dialog 90 s (env-var text, verified on Windows with hostile text + timeout). Allowlists the recipient's phone + LID chat after sending.

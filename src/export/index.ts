@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Item } from '../core/types.js';
+import type { ItemWithSource } from '../core/contracts.js';
 import type { DataPaths } from '../core/paths.js';
 
-/** An item joined with its chat name, as returned by Store.listItems. */
-export type ItemWithChat = Item & { chatName: string | null; sourcePurged: boolean };
+/** An item joined with its chat name and source message, as returned by Store.listItems. */
+export type ItemWithChat = ItemWithSource;
 
 export type ExportFormat = 'csv' | 'json';
 
@@ -78,16 +78,70 @@ const CSV_COLUMNS: (keyof ItemRow)[] = [
 /** RFC 4180 cell. Text that starts with = + - @ is prefixed with ' so Excel does not run it as a formula. */
 export function csvCell(v: unknown): string {
   let s = v === null || v === undefined ? '' : String(v);
-  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  // A spaced phone ("+92 300 1234567") cannot run as a formula, and Excel shows it as text without the quote.
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s) && !/^\+\d+( \d+)+$/.test(s)) s = `'${s}`;
   return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
 /** CSV text with a UTF-8 BOM (so Excel shows Urdu correctly) and CRLF line ends. */
-export function toCsv(rows: ItemRow[]): string {
-  const lines = [CSV_COLUMNS.join(',')];
-  for (const r of rows) lines.push(CSV_COLUMNS.map((c) => csvCell(r[c])).join(','));
+function csvOf<T>(columns: (keyof T)[], rows: T[]): string {
+  const lines = [columns.join(',')];
+  for (const r of rows) lines.push(columns.map((c) => csvCell(r[c])).join(','));
   return '﻿' + lines.join('\r\n') + '\r\n';
 }
+
+export function toCsv(rows: ItemRow[]): string {
+  return csvOf(CSV_COLUMNS, rows);
+}
+
+/** A row of the leads sheet: who showed a buy signal, how to reach them, and what they wrote. */
+export interface LeadRow {
+  id: number;
+  status: string;
+  priority: string;
+  contact: string | null;
+  phone: string | null;
+  chat_name: string | null;
+  signal: string;
+  message: string | null;
+  message_at: string | null;
+  ref: string;
+  created_at: string;
+}
+
+/**
+ * "+92 300 1234567" from a phone JID: spaced so Excel keeps it as text (a bare number shows as 9.23E+11).
+ * Null for authors known only by LID.
+ */
+export function formatPhone(jid: string | null): string | null {
+  const d = /^(\d{8,15})(?::\d+)?@s\.whatsapp\.net$/.exec(jid ?? '')?.[1];
+  if (!d) return null;
+  if (d.length <= 10) return `+${d.slice(0, -7)} ${d.slice(-7)}`;
+  return `+${d.slice(0, -10)} ${d.slice(-10, -7)} ${d.slice(-7)}`;
+}
+
+const LEAD_MESSAGE_MAX = 1000;
+
+export function leadRow(it: ItemWithChat, timezone: string): LeadRow {
+  const t = it.messageText;
+  return {
+    id: it.id,
+    status: it.status,
+    priority: it.priority,
+    contact: it.senderName ?? it.requester,
+    phone: formatPhone(it.senderPhoneJid),
+    chat_name: it.chatName,
+    signal: it.summary,
+    message: t && t.length > LEAD_MESSAGE_MAX ? `${t.slice(0, LEAD_MESSAGE_MAX)}…` : t,
+    message_at: it.messageAt ? isoInZone(it.messageAt, timezone) : null,
+    ref: `${it.chatId}/${it.messageId}`,
+    created_at: isoInZone(it.createdAt, timezone),
+  };
+}
+
+const LEAD_COLUMNS: (keyof LeadRow)[] = [
+  'id', 'status', 'priority', 'contact', 'phone', 'chat_name', 'signal', 'message', 'message_at', 'ref', 'created_at',
+];
 
 function nearestExisting(p: string): string {
   let cur = p;
@@ -105,9 +159,9 @@ function isInside(root: string, target: string): boolean {
 }
 
 /** Resolves a requested export path. Throws ExportError unless it lies inside the project folder (symlinks included). */
-export function resolveExportPath(paths: DataPaths, requested: string | undefined, format: ExportFormat, nowMs: number): string {
+export function resolveExportPath(paths: DataPaths, requested: string | undefined, format: ExportFormat, nowMs: number, base = 'items'): string {
   const date = new Date(nowMs).toISOString().slice(0, 10);
-  const wanted = requested && requested.trim() !== '' ? requested.trim() : path.join(paths.exportsDir, `items-${date}.${format}`);
+  const wanted = requested && requested.trim() !== '' ? requested.trim() : path.join(paths.exportsDir, `${base}-${date}.${format}`);
   const root = path.resolve(paths.projectRoot);
   const target = path.resolve(root, wanted);
   if (!isInside(root, target)) throw new ExportError('path must be inside the project folder');
@@ -132,12 +186,21 @@ export function writeItemsExport(opts: {
   path?: string;
   nowMs: number;
   timezone: string;
+  /** The leads sheet (contact, phone, message) instead of the items sheet. */
+  leads?: boolean;
 }): ExportResult {
-  const target = resolveExportPath(opts.paths, opts.path, opts.format, opts.nowMs);
+  const target = resolveExportPath(opts.paths, opts.path, opts.format, opts.nowMs, opts.leads ? 'leads' : 'items');
   const nowSec = Math.floor(opts.nowMs / 1000);
-  const rows = opts.items.map((i) => itemRow(i, nowSec, opts.timezone));
-  const body = opts.format === 'csv' ? toCsv(rows) : JSON.stringify({ count: rows.length, items: rows }, null, 2) + '\n';
+  let body: string;
+  const count = opts.items.length;
+  if (opts.leads) {
+    const rows = opts.items.map((i) => leadRow(i, opts.timezone));
+    body = opts.format === 'csv' ? csvOf(LEAD_COLUMNS, rows) : JSON.stringify({ count, leads: rows }, null, 2) + '\n';
+  } else {
+    const rows = opts.items.map((i) => itemRow(i, nowSec, opts.timezone));
+    body = opts.format === 'csv' ? toCsv(rows) : JSON.stringify({ count, items: rows }, null, 2) + '\n';
+  }
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, body, 'utf8');
-  return { path: path.relative(opts.paths.projectRoot, target).split(path.sep).join('/'), count: rows.length };
+  return { path: path.relative(opts.paths.projectRoot, target).split(path.sep).join('/'), count };
 }

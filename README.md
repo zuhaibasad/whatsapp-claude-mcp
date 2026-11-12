@@ -75,8 +75,8 @@ Setup runs inside the Claude chat (or in your browser for Claude Code). Four ste
 
 ## Install in 2 minutes (Claude Desktop, Windows or macOS)
 
-1. Get the file for your computer from the [Releases](../../releases) page: `chatai-<version>-windows.mcpb` (Windows x64) or `chatai-<version>-macos.mcpb` (Apple Silicon and Intel Macs). No release yet? Build it: `npm ci` then `npm run build:mcpb` (the file appears in `build/`).
-2. Claude Desktop: **Settings, Extensions, Advanced settings, Install Extension**. Pick the file. Enable **ChatAI for WhatsApp**.
+1. Download the file for your computer: **[Windows](https://github.com/zuhaibasad/whatsapp-claude-mcp/releases/latest/download/chatai-windows.mcpb)** (x64) or **[macOS](https://github.com/zuhaibasad/whatsapp-claude-mcp/releases/latest/download/chatai-macos.mcpb)** (Apple Silicon and Intel). Or use the [download page](https://zuhaibasad.github.io/whatsapp-claude-mcp/) or [all releases](../../releases).
+2. Double-click the file and click **Install** in Claude Desktop. If nothing happens: **Settings, Extensions, Advanced settings, Install Extension**, then pick the file. Enable **ChatAI for WhatsApp**.
 3. In a chat, say **"Set up WhatsApp"** and follow the four steps above.
 
 Tools missing? Quit Claude Desktop fully and open it again. You need Windows 10/11 (x64) or macOS, your own phone with WhatsApp, and a Claude account.

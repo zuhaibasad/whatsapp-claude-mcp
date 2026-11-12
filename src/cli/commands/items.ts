@@ -1,5 +1,5 @@
 import { loadConfig } from '../../config/index.js';
-import type { ItemPriority, ItemStatus } from '../../core/types.js';
+import type { ItemCategory, ItemPriority, ItemStatus } from '../../core/types.js';
 import { resolvePaths } from '../../core/paths.js';
 import { ExportError, itemRow, writeItemsExport, type ExportFormat } from '../../export/index.js';
 import type { CliDeps } from '../deps.js';
@@ -9,6 +9,7 @@ import { openStore } from '../open.js';
 
 const STATUSES: ItemStatus[] = ['open', 'done', 'dismissed'];
 const PRIORITIES: ItemPriority[] = ['critical', 'high', 'normal', 'low'];
+const CATEGORIES: ItemCategory[] = ['critical', 'mention', 'request', 'fyi', 'lead'];
 
 function pick<T extends string>(v: string | undefined, allowed: T[], flag: string): T | undefined {
   if (v === undefined) return undefined;
@@ -76,6 +77,8 @@ export interface ExportOpts {
   format?: string;
   path?: string;
   status?: string;
+  /** "lead" writes the leads sheet. */
+  category?: string;
 }
 
 export async function exportCommand(opts: ExportOpts, io: Io, deps: CliDeps): Promise<number> {
@@ -86,9 +89,11 @@ export async function exportCommand(opts: ExportOpts, io: Io, deps: CliDeps): Pr
   const { config } = loadConfig(paths);
   const { store, close } = openStore(paths, deps, { write: false });
   try {
-    const items = store.listItems({ status });
+    const category = opts.category === undefined ? undefined : pick(opts.category, CATEGORIES, '--category');
+    const items = store.listItems({ status, category });
     const res = writeItemsExport({
       paths, items, format: format as ExportFormat, path: opts.path, nowMs: deps.now(), timezone: config.timezone,
+      leads: category === 'lead',
     });
     io.out(`Exported ${res.count} item${res.count === 1 ? '' : 's'} to ${res.path}`);
     return 0;

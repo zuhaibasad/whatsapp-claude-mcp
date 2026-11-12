@@ -111,7 +111,7 @@ export interface StoredMessage extends MessageInput {
   deleted: boolean;
 }
 
-export type ItemCategory = 'critical' | 'mention' | 'request' | 'fyi';
+export type ItemCategory = 'critical' | 'mention' | 'request' | 'fyi' | 'lead';
 export type ItemPriority = 'critical' | 'high' | 'normal' | 'low';
 export type ItemStatus = 'open' | 'done' | 'dismissed';
 

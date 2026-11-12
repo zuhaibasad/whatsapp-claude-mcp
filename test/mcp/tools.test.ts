@@ -210,6 +210,20 @@ describe('export_items', () => {
     expect(raw).toContain('"Fix ""login"", urgent\nدوبارہ دیکھیں"');
     expect(raw).toContain("'=SUM(A1)");
   });
+  it('whatsapp_items saves leads and exports the leads sheet (other categories left out)', async () => {
+    h.store.insertMessage(msg({ id: 'e2', senderId: '923001234567@s.whatsapp.net', senderName: 'Bilal', text: '50 carton chahiye, rate?' }));
+    const s = await h.call('whatsapp_items', { action: 'save', items: [{ ref: `${G1}/e2`, category: 'lead', priority: 'high', summary: 'Wants 50 cartons' }] });
+    expect(s.json).toMatchObject({ saved: 1 });
+    const l = await h.call('whatsapp_items', { action: 'list', category: 'lead' });
+    expect(l.json.items).toHaveLength(1);
+    const r = await h.call('whatsapp_items', { action: 'export', format: 'csv', category: 'lead' });
+    expect(r.json.count).toBe(1);
+    expect(r.json.path).toMatch(/^\.chatai\/exports\/leads-/);
+    const raw = fs.readFileSync(path.join(h.dir, r.json.path), 'utf8');
+    expect(raw).toContain(',Bilal,+92 300 1234567,');
+    expect(raw).toContain('50 carton chahiye, rate?');
+    expect(raw).not.toContain('login');
+  });
   it('writes json to a custom path', async () => {
     const r = await h.call('export_items', { format: 'json', path: 'out/items.json' });
     expect(r.json).toEqual({ path: 'out/items.json', count: 1 });

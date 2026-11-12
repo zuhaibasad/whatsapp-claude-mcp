@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3-multiple-ciphers';
 import type {
-  ChatMessages, Db, ItemQuery, ListChatsQuery, MessageQuery, NewMessagesResult,
+  ChatMessages, Db, ItemQuery, ItemWithSource, ListChatsQuery, MessageQuery, NewMessagesResult,
   SearchHit, Store, StoreCounts, ChatSummary,
 } from '../core/contracts.js';
 import type {
@@ -580,19 +580,29 @@ export class SqliteStore implements Store {
     })();
   }
 
-  listItems(q: ItemQuery = {}): (Item & { chatName: string | null; sourcePurged: boolean })[] {
+  listItems(q: ItemQuery = {}): ItemWithSource[] {
     const where: string[] = [];
     const p: Param[] = [];
     if (q.status) { where.push('i.status = ?'); p.push(q.status); }
     if (q.department) { where.push('i.department = ?'); p.push(q.department); }
     if (q.priority) { where.push('i.priority = ?'); p.push(q.priority); }
-    const sql = `SELECT i.*, c.name AS chat_name,
-        NOT EXISTS (SELECT 1 FROM messages m WHERE m.chat_id = i.chat_id AND m.id = i.message_id) AS source_purged
+    if (q.category) { where.push('i.category = ?'); p.push(q.category); }
+    const sql = `SELECT i.*, c.name AS chat_name, m.id IS NULL AS source_purged,
+        m.sender_id AS m_sender_id, m.ts AS m_ts, m.text AS m_text,
+        COALESCE(ct.saved_name, m.sender_name, ct.push_name, ct.verified_name) AS m_sender_name,
+        COALESCE(ct.phone_jid, CASE WHEN m.sender_id LIKE '%@s.whatsapp.net' THEN m.sender_id END) AS m_phone_jid
       FROM items i LEFT JOIN chats c ON c.id = i.chat_id
+      LEFT JOIN messages m ON m.chat_id = i.chat_id AND m.id = i.message_id
+      LEFT JOIN contacts ct ON ct.id = (SELECT x.id FROM contacts x
+        WHERE x.id = m.sender_id OR x.phone_jid = m.sender_id OR x.lid = m.sender_id ORDER BY (x.id = m.sender_id) DESC LIMIT 1)
       ${where.length ? 'WHERE ' + where.join(' AND ') : ''}
       ORDER BY i.created_at ASC, i.id ASC ${q.limit !== undefined ? 'LIMIT ?' : ''}`;
     if (q.limit !== undefined) p.push(q.limit);
-    return this.all(sql, ...p).map((r) => ({ ...toItem(r), chatName: s(r.chat_name), sourcePurged: b(r.source_purged) }));
+    return this.all(sql, ...p).map((r) => ({
+      ...toItem(r), chatName: s(r.chat_name), sourcePurged: b(r.source_purged),
+      senderId: s(r.m_sender_id), senderName: s(r.m_sender_name), senderPhoneJid: s(r.m_phone_jid),
+      messageAt: r.m_ts === null || r.m_ts === undefined ? null : Number(r.m_ts), messageText: s(r.m_text),
+    }));
   }
 
   updateItem(id: number, status: ItemStatus): Item | null {

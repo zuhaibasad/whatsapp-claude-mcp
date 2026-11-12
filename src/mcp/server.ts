@@ -481,7 +481,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
       return { updated: store.setReviewed(resolveChatIds(store, a.chats), until) };
     });
 
-  const category = z.enum(['critical', 'mention', 'request', 'fyi']);
+  const category = z.enum(['critical', 'mention', 'request', 'fyi', 'lead']);
   const priority = z.enum(['critical', 'high', 'normal', 'low']);
   const itemStatus = z.enum(['open', 'done', 'dismissed']);
 
@@ -512,12 +512,15 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
   tool('list_items',
     `List saved follow-up items, oldest first, optionally by status (default all), department or priority. ${OWN_RECORDS_NOTE.replace('Changes only', 'Reads only')}`,
     z.object({
-      status: itemStatus.optional(), department: z.string().optional(), priority: priority.optional(),
+      status: itemStatus.optional(), department: z.string().optional(), priority: priority.optional(), category: category.optional(),
       limit: z.number().int().min(1).optional().describe(`default 100, max ${MAX_LIMIT}`),
     }),
     { write: false, readOnlyHint: true, hidden: true },
     (a, c, store) => {
-      const items = store.listItems({ status: a.status, department: a.department, priority: a.priority, limit: clampLimit(a.limit, 100) });
+      const items = store.listItems({
+        status: a.status, department: a.department, priority: a.priority, category: a.category as ItemCategory | undefined,
+        limit: clampLimit(a.limit, 100),
+      });
       return { items: items.map((i) => itemRow(i, c.nowSec, c.config.timezone)) };
     });
 
@@ -536,11 +539,13 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     z.object({
       format: z.enum(['csv', 'json']), path: z.string().optional().describe('relative to the project folder'),
       status: itemStatus.optional().describe('default "open"'),
+      category: category.optional().describe('"lead" writes the leads sheet (contact, phone, message)'),
     }),
     { write: false, readOnlyHint: false, hidden: true },
     (a, c, store) => {
-      const items = store.listItems({ status: a.status ?? 'open' });
-      return { ...writeItemsExport({ paths, items, format: a.format, path: a.path, nowMs: deps.now(), timezone: c.config.timezone }) };
+      const cat = a.category as ItemCategory | undefined;
+      const items = store.listItems({ status: a.status ?? 'open', category: cat });
+      return { ...writeItemsExport({ paths, items, format: a.format, path: a.path, nowMs: deps.now(), timezone: c.config.timezone, leads: cat === 'lead' }) };
     });
 
   // ---------- setup + conversational control ----------
@@ -651,7 +656,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
   };
 
   plain('whatsapp_status',
-    'Check whether WhatsApp is linked, whether the collector is up to date, and any warnings. Optionally waits for the collector to catch up first. With diagnose true, also runs a health check (folder, key, connection, disk) with plain-language fixes: use it when something seems broken. Local check only.',
+    'Is WhatsApp linked and the collector up to date, plus warnings. Can wait for sync first. diagnose true adds a health check (folder, key, connection, disk) with fixes: use it when something seems broken. Local only.',
     z.object({
       wait_for_sync_seconds: z.number().int().min(0).max(120).optional().describe('default 0'),
       diagnose: z.boolean().optional().describe('run the health check and include its results'),
@@ -765,11 +770,12 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     });
 
   plain('whatsapp_items',
-    'Follow-up items kept by ChatAI. action: "save" (needs items), "list", "update" (needs id and status), "export" (needs format csv|json). Changes only ChatAI\'s own records, never WhatsApp.',
+    'ChatAI\'s own follow-up items (never WhatsApp). action: "save" (needs items), "list", "update" (id+status), "export" (format). category "lead" = buy signal; export with it gives a leads sheet (name, phone).',
     z.object({
       action: z.enum(['save', 'list', 'update', 'export']),
+      category: z.enum(['critical', 'mention', 'request', 'fyi', 'lead']).optional(),
       items: z.array(z.object({
-        ref: z.string().describe('chat_id/message_id'), category: z.enum(['critical', 'mention', 'request', 'fyi']),
+        ref: z.string().describe('chat_id/message_id'), category: z.enum(['critical', 'mention', 'request', 'fyi', 'lead']),
         department: z.string().optional(), priority: z.enum(['critical', 'high', 'normal', 'low']),
         summary: z.string().min(1).max(2000), requester: z.string().optional(),
       })).min(1).max(200).optional(),
@@ -791,13 +797,13 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
           need(a.items, '"items"');
           return inner('save_items', pickFrom(a, 'items'));
         case 'list':
-          return inner('list_items', pickFrom(a, 'status', 'department', 'priority'));
+          return inner('list_items', pickFrom(a, 'status', 'department', 'priority', 'category'));
         case 'update':
           need(a.id !== undefined && a.status, '"id" and "status"');
           return inner('update_item', pickFrom(a, 'id', 'status'));
         default:
           need(a.format, '"format" (csv or json)');
-          return inner('export_items', pickFrom(a, 'format', 'path', 'status'));
+          return inner('export_items', pickFrom(a, 'format', 'path', 'status', 'category'));
       }
     });
 
@@ -827,9 +833,9 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
   try { sendingOn = loadConfig(paths).config.allowSending; } catch { /* config errors surface in the other tools */ }
   if (sendingOn) {
     plain('whatsapp_send_direct',
-      'Send a PRIVATE 1-to-1 text to the person who wrote a message (e.g. ask a stock poster for the price). Only when the user asks you to message someone. One message per call. The user confirms it (a prompt in Claude, else a pop-up on this PC); report "sent" only if the result says sent: true. Never sends to groups.',
+      'Send a PRIVATE 1-to-1 text to someone who wrote a message (e.g. a stock poster) or to an existing 1-to-1 chat. Only when the user asks you to message someone. One message per call. The user confirms it (a prompt in Claude, else a pop-up on this PC); report "sent" only if the result says sent: true. Never sends to groups.',
       z.object({
-        ref: z.string().describe('chat_id/message_id of a message the person wrote'),
+        ref: z.string().describe('chat_id/message_id of a message the person wrote, or a 1-to-1 chat name, id or phone'),
         text: z.string().min(1).max(1000).describe('the exact message, in the user\'s language'),
       }),
       { readOnlyHint: false },
@@ -854,7 +860,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
   }
 
   tool('whatsapp_choose_chats',
-    'Only when the user names specific chats to add or remove. If they want to add or remove chats without naming them, or to browse, call whatsapp_setup with screen "chats" instead. Newly added chats collect new messages only. Changes only chatai settings, never WhatsApp.',
+    'Only when the user names specific chats to add or remove. To browse or pick without names, call whatsapp_setup with screen "chats". Newly added chats collect new messages only. Changes only chatai settings, never WhatsApp.',
     z.object({
       include: z.array(z.string()).optional().describe('chat names or ids to add'),
       exclude: z.array(z.string()).optional().describe('chat names or ids to remove'),

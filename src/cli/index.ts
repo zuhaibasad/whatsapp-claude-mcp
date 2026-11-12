@@ -115,7 +115,8 @@ export function buildProgram(io: Io, deps: CliDeps, setExit: (code: number) => v
     .option('--format <format>', 'csv or json', 'csv')
     .option('--path <file>', 'target file inside the project folder')
     .option('--status <status>', 'open, done or dismissed', 'open')
-    .action((o: { format?: string; path?: string; status?: string }) =>
+    .option('--category <category>', 'only this category; "lead" writes the leads sheet (name, phone, message)')
+    .action((o: { format?: string; path?: string; status?: string; category?: string }) =>
       run(() => exportCommand({ project: project(), ...o }, io, deps))());
 
   program.command('mcp')

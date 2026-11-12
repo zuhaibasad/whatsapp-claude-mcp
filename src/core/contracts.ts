@@ -1,7 +1,7 @@
 // Interfaces between modules. Workers implement these exactly; change only via the orchestrator.
 import type Database from 'better-sqlite3-multiple-ciphers';
 import type {
-  Account, Chat, ChatType, Contact, Item, ItemInput, ItemStatus, ItemPriority,
+  Account, Chat, ChatType, Contact, Item, ItemInput, ItemStatus, ItemPriority, ItemCategory,
   MediaInfo, MediaRef, MediaStatus, MessageInput, MentionReason, OcrFields, Participant, StoredMessage,
 } from './types.js';
 
@@ -110,10 +110,24 @@ export interface ChatSummary extends Chat {
 
 export interface ItemQuery {
   status?: ItemStatus;
+  category?: ItemCategory;
   department?: string;
   priority?: ItemPriority;
   limit?: number;
 }
+
+/** An item joined with its chat name and the source message's author (null once the message is purged). */
+export type ItemWithSource = Item & {
+  chatName: string | null;
+  sourcePurged: boolean;
+  senderId: string | null;
+  /** Saved contact name, else the WhatsApp display name. */
+  senderName: string | null;
+  /** Phone JID of the author, when known (LID-only authors have none). */
+  senderPhoneJid: string | null;
+  messageAt: number | null;
+  messageText: string | null;
+};
 
 export interface StoreCounts {
   chatsIncluded: number;
@@ -186,7 +200,7 @@ export interface Store {
   capMediaBytes(maxBytes: number): number;
 
   saveItems(items: ItemInput[]): { saved: number; duplicates: number; ids: number[] };
-  listItems(q?: ItemQuery): (Item & { chatName: string | null; sourcePurged: boolean })[];
+  listItems(q?: ItemQuery): ItemWithSource[];
   updateItem(id: number, status: ItemStatus): Item | null;
 
   getMeta(key: string): string | null;

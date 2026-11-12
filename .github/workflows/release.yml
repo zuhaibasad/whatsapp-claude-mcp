@@ -1,0 +1,66 @@
+name: Release
+
+# Push a tag like v0.5.1: builds and smoke-tests both bundles, then publishes a GitHub release.
+# Each bundle is attached twice: versioned (chatai-0.5.1-windows.mcpb) and stable (chatai-windows.mcpb),
+# so the download page can always link releases/latest/download/chatai-<os>.mcpb.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows
+          - os: macos-latest
+            target: macos
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build:mcpb
+      - run: npm run smoke:mcpb
+      - name: Check the tag matches package.json
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          test "v$v" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match package.json $v"; exit 1; }
+          cp "build/chatai-$v-${{ matrix.target }}.mcpb" "build/chatai-${{ matrix.target }}.mcpb"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcpb-${{ matrix.target }}
+          path: build/chatai-*${{ matrix.target }}.mcpb
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mcpb-*
+          merge-multiple: true
+          path: dist-release
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -la dist-release
+          notes="release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$notes" ]; then flag=(--notes-file "$notes"); else flag=(--generate-notes); fi
+          gh release create "$GITHUB_REF_NAME" dist-release/*.mcpb --title "ChatAI for WhatsApp ${GITHUB_REF_NAME}" "${flag[@]}"

@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChatAI for WhatsApp</title>
+<meta name="description" content="Ask Claude about your own WhatsApp chats: briefs, mentions, bills and buyer leads. Runs on your computer. One-file install for Claude Desktop.">
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #f8f8fc; --surface: #ffffff; --text: #16161d; --muted: #5b5b6b; --line: #e4e4ee;
+    --brand: #5b4ff0; --brand-2: #7c3aed; --brand-ink: #ffffff; --soft: #eeedfd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f0f15; --surface: #181822; --text: #ececf3; --muted: #a2a2b5; --line: #2a2a38; --brand: #8b83ff; --brand-2: #a78bfa; --brand-ink: #0f0f15; --soft: #20203a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--brand); }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 20px; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; color: var(--text); }
+  .brand img { width: 32px; height: 32px; }
+  .hero { padding: 48px 0 32px; display: grid; gap: 40px; grid-template-columns: 1.1fr 1fr; align-items: center; }
+  h1 { font-size: clamp(2rem, 5vw, 3.1rem); line-height: 1.1; letter-spacing: -0.02em; margin: 0 0 16px; }
+  .lead { font-size: 1.15rem; color: var(--muted); margin: 0 0 28px; max-width: 34em; }
+  .buttons { display: flex; flex-wrap: wrap; gap: 12px; }
+  .btn { display: inline-flex; flex-direction: column; padding: 12px 20px; border-radius: 12px; text-decoration: none; font-weight: 600; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+  .btn small { font-weight: 400; color: var(--muted); font-size: 0.8rem; }
+  .btn.primary { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: var(--brand-ink); border-color: transparent; }
+  .btn.primary small { color: inherit; opacity: 0.85; }
+  .fine { color: var(--muted); font-size: 0.9rem; margin-top: 14px; }
+  .shot { width: 100%; border-radius: 16px; border: 1px solid var(--line); box-shadow: 0 20px 50px -20px rgba(40, 30, 120, 0.35); }
+  section { padding: 40px 0; border-top: 1px solid var(--line); }
+  h2 { font-size: 1.5rem; margin: 0 0 20px; letter-spacing: -0.01em; }
+  .steps { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; grid-template-columns: repeat(3, 1fr); counter-reset: s; }
+  .steps li { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px; counter-increment: s; }
+  .steps li::before { content: counter(s); display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--soft); color: var(--brand); font-weight: 700; margin-bottom: 10px; }
+  .steps li > b { display: block; margin-bottom: 4px; }
+  .steps p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+  .asks { display: flex; flex-wrap: wrap; gap: 10px; padding: 0; margin: 0; list-style: none; }
+  .asks li { background: var(--soft); border-radius: 999px; padding: 8px 14px; font-size: 0.95rem; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  .cols ul { margin: 0; padding-left: 20px; color: var(--muted); }
+  .cols li { margin-bottom: 6px; }
+  footer { padding: 32px 0 48px; color: var(--muted); font-size: 0.85rem; border-top: 1px solid var(--line); }
+  code { background: var(--soft); padding: 1px 6px; border-radius: 6px; font-size: 0.9em; }
+  @media (max-width: 760px) {
+    .hero, .cols { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: 1fr; }
+    .hero { padding-top: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="brand" href="./"><img src="logo.svg" alt="">ChatAI for WhatsApp</a>
+    <a href="https://github.com/zuhaibasad/whatsapp-claude-mcp">GitHub</a>
+  </header>
+
+  <div class="hero">
+    <div>
+      <h1>Ask Claude what's happening in your WhatsApp.</h1>
+      <p class="lead">Daily briefs, mentions, bills and payment screenshots, and buyers to follow up, from the chats you pick. It runs on your own computer, and your messages stay there.</p>
+      <div class="buttons">
+        <a class="btn" id="win" href="https://github.com/zuhaibasad/whatsapp-claude-mcp/releases/latest/download/chatai-windows.mcpb">Download for Windows<small>Windows 10/11, x64</small></a>
+        <a class="btn" id="mac" href="https://github.com/zuhaibasad/whatsapp-claude-mcp/releases/latest/download/chatai-macos.mcpb">Download for macOS<small>Apple Silicon and Intel</small></a>
+      </div>
+      <p class="fine">Free and open source. Needs <a href="https://claude.ai/download">Claude Desktop</a> and your phone with WhatsApp. <a href="https://github.com/zuhaibasad/whatsapp-claude-mcp/releases">All versions</a></p>
+    </div>
+    <img class="shot" src="setup.png" alt="ChatAI setup inside Claude: choose which WhatsApp chats Claude may read" width="760" height="612">
+  </div>
+
+  <section>
+    <h2>Install in two minutes</h2>
+    <ol class="steps">
+      <li><b>Download</b><p>Get the file for your computer above. It is one <code>.mcpb</code> file.</p></li>
+      <li><b>Open it</b><p>Double-click the file and click <b>Install</b> in Claude Desktop. If nothing happens: Settings, Extensions, Advanced settings, Install Extension, and pick the file.</p></li>
+      <li><b>Link WhatsApp</b><p>In a new chat say <b>"Set up WhatsApp"</b>, scan the QR code with your phone (Linked devices), and pick the chats Claude may read.</p></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Things to ask</h2>
+    <ul class="asks">
+      <li>"Brief me on today's WhatsApp"</li>
+      <li>"Who mentioned me?"</li>
+      <li>"Total payments this week"</li>
+      <li>"Find buyers asking for prices and export them to Excel"</li>
+      <li>"What did the supplier group decide?"</li>
+    </ul>
+  </section>
+
+  <section class="cols">
+    <div>
+      <h2>Private by design</h2>
+      <ul>
+        <li>Your messages are stored encrypted on your computer. The key is kept in Windows Credential Manager or the macOS Keychain.</li>
+        <li>No ChatAI server. Nothing is uploaded except what you show Claude in a chat.</li>
+        <li>Claude reads only the chats you choose.</li>
+        <li>Read-only: it never reacts, marks messages read, or shows you online.</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Good to know</h2>
+      <ul>
+        <li>It collects while Claude Desktop is open.</li>
+        <li>Optional: send a private message to someone, only when you turn it on, and only after you confirm each one.</li>
+        <li>To update, install the new file the same way. Your link and data stay.</li>
+        <li>Questions or problems: <a href="https://github.com/zuhaibasad/whatsapp-claude-mcp/issues">open an issue</a>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    Not affiliated with WhatsApp, Meta or Anthropic. Using unofficial WhatsApp clients can break WhatsApp's terms and, rarely, get a number restricted; use your own account at your own risk.
+    Source code: MIT. The downloadable bundles include libsignal and are distributed under GPL-3.0.
+  </footer>
+</div>
+<script>
+  // Put the button for this computer first.
+  (function () {
+    var mac = /Mac/i.test(navigator.platform || navigator.userAgent);
+    var first = document.getElementById(mac ? 'mac' : 'win');
+    first.classList.add('primary');
+    first.parentNode.insertBefore(first, first.parentNode.firstChild);
+  })();
+</script>
+</body>
+</html>
