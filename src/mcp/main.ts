@@ -13,6 +13,7 @@ import { readLock } from '../daemon/lock.js';
 import { SqliteStore } from '../store/index.js';
 import { loadRealHost, type HostBridge } from './host.js';
 import { createServer, ToolError, type McpDeps } from './server.js';
+import { muteConsoleForStdio } from './stdout-guard.js';
 
 /** Builds the real dependencies. Nothing here touches stdout: it is the protocol channel. */
 export function realDeps(target: string | DataPaths, keyStore?: (root: string) => MasterKeyStore): McpDeps {
@@ -57,6 +58,7 @@ export async function runStdio(
   keyStore?: (root: string) => MasterKeyStore,
   opts: { withHost?: boolean } = {},
 ): Promise<void> {
+  muteConsoleForStdio();
   const paths = typeof target === 'string' ? resolvePaths(target) : target;
   const deps = realDeps(paths, keyStore);
   const ref: { host: HostBridge | null } = { host: null };
