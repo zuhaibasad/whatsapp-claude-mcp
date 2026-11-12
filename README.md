@@ -1,3 +1,4 @@
+
 <div align="center">
 
 <img src="docs/assets/hero.svg" alt="ChatAI for WhatsApp: your WhatsApp, briefed by Claude" width="100%">
@@ -14,6 +15,7 @@ Daily WhatsApp brief, mentions, follow-ups, bills and payment screenshots. Roman
 ![Claude Desktop](https://img.shields.io/badge/Claude-Desktop%20%2B%20Code-D97757)
 ![MCP](https://img.shields.io/badge/MCP-server-8A63D2)
 ![Read-only](https://img.shields.io/badge/WhatsApp-read--only-brightgreen)
+[![M8ven Score](https://m8ven.ai/badge/mcp/zuhaibasad/whatsapp-claude-mcp)](https://m8ven.ai/mcp/zuhaibasad/whatsapp-claude-mcp?s=readme)
 
 </div>
 
@@ -233,3 +235,4 @@ Seven MCP tools: `whatsapp_brief`, `whatsapp_status`, `whatsapp_read`, `whatsapp
 ChatAI for WhatsApp is an independent project. It is not affiliated with, authorized by, or endorsed by WhatsApp LLC, Meta Platforms, or Anthropic. WhatsApp, Meta and Claude are trademarks of their owners, used here only to describe compatibility. Use at your own risk and follow the laws and terms that apply to you.
 
 <div align="center"><sub>Built by <a href="https://github.com/zuhaibasad">Zuhaib Asad</a></sub></div>
+[![M8ven Score](https://m8ven.ai/badge/mcp/zuhaibasad-whatsapp-claude-mcp-vvq9l9?v=c35518a50a11aad26ce1448f7acef529)](https://m8ven.ai/mcp/zuhaibasad-whatsapp-claude-mcp-vvq9l9?s=readme)
