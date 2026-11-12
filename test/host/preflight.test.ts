@@ -108,7 +108,8 @@ describe('leftovers', () => {
   it('remembers "keep" for old folders and does not ask again', async () => {
     const paths = resolveUserPaths(path.join(home, 'new', 'chatai'));
     writeLocation({ dataDir: paths.dataDir }, env, platform);
-    const old = path.join(home, 'Local', 'wa-bridge');
+    // ~/.wa-bridge is an old-folder candidate on every platform (%LOCALAPPDATA%\wa-bridge is Windows-only).
+    const old = path.join(home, '.wa-bridge');
     seed(old, true);
     const first = dialogs({ confirm: [false] });
     expect(await preflight({ paths, keyring, dialogs: first, env, platform })).toBeNull();
