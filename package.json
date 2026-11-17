@@ -1,6 +1,6 @@
 {
   "name": "chatai",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "ChatAI for WhatsApp: read-only, local WhatsApp access for Claude (MCP + CLI + skills).",
   "license": "MIT",
   "private": true,
