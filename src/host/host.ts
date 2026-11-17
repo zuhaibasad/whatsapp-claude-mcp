@@ -119,6 +119,7 @@ export function createHost(paths: DataPaths, over: Partial<HostDeps> = {}): Host
     diagnose: wrap((o) => () => o.diagnose()),
     sendDirect: wrap((o) => (a: { ref: string; text: string; approval?: string }) => o.sendDirect(a)),
     previewDirect: wrap((o) => (a: { ref: string; text: string }) => o.previewDirect(a)),
+    checkNumbers: wrap((o) => (phones: string[]) => o.checkNumbers(phones)),
     mintNonce: wrap((o) => (kind?: 'accept' | 'disconnect') => o.mintNonce(kind)),
     openSetup: wrap((o) => (screen?: SetupScreen) => o.openSetup(screen)),
   };

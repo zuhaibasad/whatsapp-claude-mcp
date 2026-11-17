@@ -55,7 +55,7 @@ describe('read-only guard: denylist', () => {
       expect(WRITE_API_DENYLIST).toContain(n);
     }
     expect(WRITE_API_PATTERNS).toHaveLength(9);
-    expect(ALLOWED_EXCEPTIONS).toEqual(['logout', 'sendMessage']);
+    expect(ALLOWED_EXCEPTIONS).toEqual(['logout', 'sendMessage', 'onWhatsApp']);
   });
 
   it('sendMessage is allowed only inside sendDirectText() in wa-client.ts', () => {
@@ -66,6 +66,13 @@ describe('read-only guard: denylist', () => {
     const wrongFn = ok.replace('sendDirectText', 'broadcast');
     expect(scanSource('src/daemon/wa/wa-client.ts', wrongFn).map((v) => v.name)).toEqual(['sendMessage']);
     expect(scanSource('src/daemon/wa/wa-client.ts', `const n = 'sendMessage';\n`).map((v) => v.rule)).toEqual(['denylist-api']);
+  });
+
+  it('onWhatsApp is allowed only inside checkOnWhatsApp() in wa-client.ts', () => {
+    const ok = `declare const sock: Record<string, (...j: string[]) => Promise<unknown>>;\nexport const c = {\n  async checkOnWhatsApp(p: string[]) {\n    return sock.onWhatsApp(...p);\n  },\n};\n`;
+    expect(scanSource('src/daemon/wa/wa-client.ts', ok)).toEqual([]);
+    expect(scanSource('src/host/core.ts', ok).filter((v) => v.name === 'onWhatsApp').map((v) => v.rule)).toEqual(['denylist-api']);
+    expect(scanSource('src/daemon/wa/wa-client.ts', ok.replace('checkOnWhatsApp', 'probe')).map((v) => v.name)).toEqual(['onWhatsApp']);
   });
 
   it('matches pattern names and does not match read APIs', () => {

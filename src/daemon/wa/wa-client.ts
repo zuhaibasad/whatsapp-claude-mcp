@@ -49,7 +49,13 @@ export interface CreateWaClientOptions {
   env?: NodeJS.ProcessEnv;
   /** Test hook / override for the proxy agent. Default: built from the environment, none when no proxy applies. */
   agent?: Agent;
+  /** Test hook: clock (ms). Default Date.now. */
+  now?: () => number;
 }
+
+/** Group metadata re-fetch pause after WhatsApp answers 'rate-overlimit': 60 s, doubling, at most 10 min. */
+export const GROUP_REFETCH_PAUSE_MS = 60_000;
+export const GROUP_REFETCH_PAUSE_MAX_MS = 10 * 60_000;
 
 export function mapDisconnectReason(statusCode: number | undefined): CloseReason {
   switch (statusCode) {
@@ -171,19 +177,34 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
   }
 
   // Serialised, de-duplicated group metadata re-fetch (a read query, same as WhatsApp Web).
+  // On 'rate-overlimit' every queued and new re-fetch is dropped until the pause ends (one warning per pause).
+  const now = opts.now ?? Date.now;
   const pendingGroups = new Set<string>();
   let fetchChain: Promise<void> = Promise.resolve();
+  let pauseUntil = 0;
+  let pauseMs = 0;
   function refetchGroup(current: Sock, gen: number, id: string): void {
+    if (now() < pauseUntil) return;
     if (pendingGroups.has(id)) return;
     pendingGroups.add(id);
     fetchChain = fetchChain.then(async () => {
       pendingGroups.delete(id);
-      if (gen !== generation) return;
+      if (gen !== generation || now() < pauseUntil) return;
       try {
         const md = await current.groupMetadata(id);
+        pauseMs = 0;
         if (gen === generation) emit('groups', [toGroupMeta(md)]);
       } catch (err) {
-        logger.warn({ id, err: err instanceof Error ? err.message : 'unknown' }, 'group metadata fetch failed');
+        const text = err instanceof Error ? err.message : 'unknown';
+        if (text.includes('rate-overlimit')) {
+          pauseMs = pauseMs === 0 ? GROUP_REFETCH_PAUSE_MS : Math.min(pauseMs * 2, GROUP_REFETCH_PAUSE_MAX_MS);
+          pauseUntil = now() + pauseMs;
+          const dropped = pendingGroups.size;
+          pendingGroups.clear();
+          logger.warn({ pauseS: pauseMs / 1000, dropped }, 'group metadata rate-limited: pausing re-fetches');
+        } else {
+          logger.warn({ id, err: text }, 'group metadata fetch failed');
+        }
       }
     });
   }
@@ -366,6 +387,24 @@ export function createWaClient(opts: CreateWaClientOptions): WaClient {
         if (sentCache.size > 50) sentCache.delete(sentCache.keys().next().value as string);
       }
       return { id };
+    },
+
+    /**
+     * Approved exception (docs/DECISIONS.md 2026-11-17): a read-only lookup of whether phone numbers have WhatsApp.
+     * Callers rate-limit it (HolderCore.checkNumbers). Never makes a number sendable.
+     */
+    async checkOnWhatsApp(phones: string[]) {
+      const digits = phones.map((p) => p.replace(/\D/g, ''));
+      if (digits.length === 0 || digits.length > 10 || digits.some((d) => d.length < 7 || d.length > 15)) {
+        throw new Error('pass 1 to 10 phone numbers in international form');
+      }
+      const current = sock;
+      if (!current) throw new Error('WhatsApp is not connected right now');
+      const found = (await current.onWhatsApp(...digits.map((d) => `${d}@s.whatsapp.net`))) ?? [];
+      return digits.map((d) => {
+        const hit = found.find((f) => f.exists && f.jid.split('@')[0]?.split(':')[0] === d);
+        return { phone: d, exists: !!hit, jid: hit ? jidNormalizedUser(hit.jid) : null };
+      });
     },
 
     async unlink() {

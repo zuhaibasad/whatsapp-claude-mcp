@@ -13,6 +13,15 @@ type Row = Record<string, unknown>;
 type Param = string | number | bigint | Buffer | null;
 
 const b = (v: unknown): boolean => Number(v) !== 0;
+
+/** Someone seen in a stored group: a metadata participant ('member') or the author of a stored message ('poster'). */
+export interface GroupPerson {
+  chatId: string;
+  chatName: string | null;
+  personId: string;
+  name: string | null;
+  source: 'member' | 'poster';
+}
 const n = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
 const s = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
 
@@ -300,6 +309,30 @@ export class SqliteStore implements Store {
     return this.all('SELECT * FROM participants WHERE chat_id = ? ORDER BY contact_id', chatId).map((r) => ({
       chatId: String(r.chat_id), contactId: String(r.contact_id), displayName: s(r.display_name), isAdmin: b(r.is_admin),
     }));
+  }
+
+  /** Every stored contact (send recipient lookup). */
+  listContacts(): Contact[] {
+    return this.all('SELECT * FROM contacts').map(toContact);
+  }
+
+  /**
+   * People known from stored groups (send recipient lookup): participants from group metadata ('member') and authors
+   * of stored group messages ('poster', with their latest sender name). Ids are as stored (phone JID or LID).
+   */
+  listGroupPeople(): GroupPerson[] {
+    const members = this.all(
+      `SELECT p.chat_id, c.name AS chat_name, p.contact_id AS pid, p.display_name AS pname FROM participants p
+       JOIN chats c ON c.id = p.chat_id WHERE c.type = 'group'`,
+    ).map((r): GroupPerson => ({ chatId: String(r.chat_id), chatName: s(r.chat_name), personId: String(r.pid), name: s(r.pname), source: 'member' }));
+    const posters = this.all(
+      `SELECT m.chat_id, c.name AS chat_name, m.sender_id AS pid,
+         (SELECT m2.sender_name FROM messages m2 WHERE m2.chat_id = m.chat_id AND m2.sender_id = m.sender_id
+            AND m2.sender_name IS NOT NULL ORDER BY m2.ts DESC LIMIT 1) AS pname
+       FROM messages m JOIN chats c ON c.id = m.chat_id
+       WHERE c.type = 'group' AND m.is_from_me = 0 GROUP BY m.chat_id, m.sender_id`,
+    ).map((r): GroupPerson => ({ chatId: String(r.chat_id), chatName: s(r.chat_name), personId: String(r.pid), name: s(r.pname), source: 'poster' }));
+    return [...members, ...posters];
   }
 
   // ---------- messages ----------

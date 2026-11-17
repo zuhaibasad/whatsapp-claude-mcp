@@ -818,7 +818,7 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
     try {
       const r = await low.elicitInput({
         mode: 'form',
-        message: `Send this PRIVATE WhatsApp message from your number?\n\nTo: ${p.to}${p.where ? `\n(they posted in: ${p.where})` : ''}\n\nMessage:\n${p.text}\n\nAccept sends it. Decline or close: nothing is sent.`,
+        message: `Send this PRIVATE WhatsApp message from your number?\n\nTo: ${p.to}\n(${p.how})\n\nMessage:\n${p.text}\n\nAccept sends it. Decline or close: nothing is sent.`,
         requestedSchema: { type: 'object', properties: {} },
       }, { timeout: SEND_ELICIT_TIMEOUT_MS });
       if (r.action === 'accept') return 'accept';
@@ -833,9 +833,9 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
   try { sendingOn = loadConfig(paths).config.allowSending; } catch { /* config errors surface in the other tools */ }
   if (sendingOn) {
     plain('whatsapp_send_direct',
-      'Send a PRIVATE 1-to-1 text to someone who wrote a message (e.g. a stock poster) or to an existing 1-to-1 chat. Only when the user asks you to message someone. One message per call. The user confirms it (a prompt in Claude, else a pop-up on this PC); report "sent" only if the result says sent: true. Never sends to groups.',
+      'Send a PRIVATE 1-to-1 text, only when the user asks you to message someone. To reply privately to the person who posted or asked something in a group: first find that group message (whatsapp_read or whatsapp_search), then pass its ref "chat_id/message_id" here; it goes to the message author, not the group. Otherwise pass a name, phone or JID of someone the user knows: an existing 1-to-1 chat, a saved contact, or a member of a stored group. Numbers nobody knows are refused (no cold messages). If the result says a name matches several people, ask the user which one and retry with the phone number. One message per call. The user confirms it (a prompt in Claude, else a pop-up on this PC); report "sent" only if the result says sent: true. Never sends to groups.',
       z.object({
-        ref: z.string().describe('chat_id/message_id of a message the person wrote, or a 1-to-1 chat name, id or phone'),
+        ref: z.string().describe('"chat_id/message_id" of a message the person wrote (group messages too), or their name, phone or JID'),
         text: z.string().min(1).max(1000).describe('the exact message, in the user\'s language'),
       }),
       { readOnlyHint: false },
@@ -856,6 +856,19 @@ export function createServer(deps: McpDeps, options: ServerOptions = {}): Create
           ? (r.reply_tracking ? 'Sent. Their 1-to-1 chat is now read, so their reply will show up in whatsapp_read.' : 'Sent.')
           : r.reason === 'no_dialog' ? 'Not sent: no confirmation pop-up could be shown on this computer.' : 'Not sent: the user cancelled or did not answer.';
         return text({ ...r, note });
+      });
+
+    plain('whatsapp_check_number',
+      'Check whether phone numbers are on WhatsApp (1 to 10 per call, rate-limited). Only when the user asks. Being on WhatsApp does NOT make a number messageable: whatsapp_send_direct still only reaches people the user already knows.',
+      z.object({
+        phones: z.array(z.string().min(1).max(32)).min(1).max(10).describe('phone numbers, international (+92...) or local with a leading 0'),
+      }),
+      { readOnlyHint: true },
+      async (a) => {
+        const ops = (await needHost()).ops();
+        const results = await ops.checkNumbers((a.phones as string[]).map(String));
+        deps.log?.('tool', { name: 'whatsapp_check_number', ok: true, count: results.length });
+        return text({ results });
       });
   }
 

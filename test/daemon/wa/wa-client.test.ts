@@ -46,13 +46,14 @@ function setup(userOverride?: object) {
   return { ev, accessed, target, factory, config };
 }
 
-async function build(userOverride?: object) {
+async function build(userOverride?: object, extra: { now?: () => number; logger?: pino.Logger } = {}) {
   const s = setup(userOverride);
   const db = new Database(':memory:');
   const auth = await useDbAuthState(db);
   const client = createWaClient({
     auth,
-    logger: pino({ level: 'silent' }),
+    logger: extra.logger ?? pino({ level: 'silent' }),
+    ...(extra.now ? { now: extra.now } : {}),
     socketFactory: s.factory,
     env: {},
     fetchVersion: async () => ({ version: [2, 3000, 1] }),
@@ -110,6 +111,58 @@ describe('createWaClient', () => {
     expect(await client.sendDirectText('5@s.whatsapp.net', 'rate?')).toEqual({ id: 'S1' });
     expect(sendMessage).toHaveBeenCalledExactlyOnceWith('5@s.whatsapp.net', { text: 'rate?' });
     expect(await (config[0]!.getMessage as (k: object) => Promise<unknown>)({ id: 'S1' })).toEqual({ conversation: 'rate?' });
+  });
+
+  it('checkOnWhatsApp: one onWhatsApp call with phone JIDs, one result per number, input checked first', async () => {
+    const { client, target } = await build();
+    const onWhatsApp = vi.fn(async (..._j: string[]) => [{ jid: '923001234567@s.whatsapp.net', exists: true }]);
+    Object.assign(target, { onWhatsApp });
+    await expect(client.checkOnWhatsApp(['923001234567'])).rejects.toThrow(/not connected/);
+    await client.connect();
+    await expect(client.checkOnWhatsApp([])).rejects.toThrow(/1 to 10/);
+    await expect(client.checkOnWhatsApp(['12'])).rejects.toThrow(/1 to 10/);
+    expect(await client.checkOnWhatsApp(['+92 300 1234567', '923009999999'])).toEqual([
+      { phone: '923001234567', exists: true, jid: '923001234567@s.whatsapp.net' },
+      { phone: '923009999999', exists: false, jid: null },
+    ]);
+    expect(onWhatsApp).toHaveBeenCalledExactlyOnceWith('923001234567@s.whatsapp.net', '923009999999@s.whatsapp.net');
+  });
+
+  it('group re-fetch backs off on rate-overlimit: drops the queue, one warning per pause, doubling, reset on success', async () => {
+    let t = 1_000_000;
+    const lines: { msg: string; pauseS?: number }[] = [];
+    const logger = pino({ level: 'warn' }, { write: (l: string) => void lines.push(JSON.parse(l) as { msg: string }) });
+    const { client, ev, target } = await build(undefined, { now: () => t, logger });
+    let limited = true;
+    target.groupMetadata.mockImplementation(async (id: string) => {
+      if (limited) throw new Error('rate-overlimit');
+      return { id, subject: 'S', participants: [] };
+    });
+    await client.connect();
+    for (let i = 0; i < 20; i++) ev.emit('groups.update', [{ id: `g${i}@g.us` }]);
+    await tick();
+    expect(target.groupMetadata).toHaveBeenCalledTimes(1);
+    const pauses = (): (number | undefined)[] => lines.filter((l) => l.msg.includes('rate-limited')).map((l) => l.pauseS);
+    expect(pauses()).toEqual([60]);
+    expect(lines.filter((l) => l.msg === 'group metadata fetch failed')).toEqual([]);
+    ev.emit('groups.update', [{ id: 'g1@g.us' }]); // still paused: dropped
+    await tick();
+    expect(target.groupMetadata).toHaveBeenCalledTimes(1);
+    t += 61_000;
+    ev.emit('groups.update', [{ id: 'g1@g.us' }]);
+    await tick();
+    expect(pauses()).toEqual([60, 120]); // doubled
+    t += 121_000;
+    limited = false;
+    ev.emit('groups.update', [{ id: 'g2@g.us' }]);
+    await tick();
+    expect(target.groupMetadata).toHaveBeenCalledTimes(3);
+    limited = true;
+    ev.emit('groups.update', [{ id: 'g3@g.us' }]);
+    await tick();
+    expect(pauses()).toEqual([60, 120, 60]); // reset after the success
+    for (let i = 0; i < 6; i++) { t += 11 * 60_000; ev.emit('groups.update', [{ id: 'g4@g.us' }]); await tick(); }
+    expect(Math.max(...pauses().map(Number))).toBe(600); // capped at 10 min
   });
 
   it('drives a full session without touching any write API', async () => {

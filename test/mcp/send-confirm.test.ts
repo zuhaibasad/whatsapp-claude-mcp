@@ -4,7 +4,7 @@ import path from 'node:path';
 import { InMemoryTransport, type JSONRPCMessage } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolvePaths } from '../../src/core/paths.js';
-import type { SendDirectResult, SendPreview } from '../../src/core/service.js';
+import type { NumberCheckResult, SendDirectResult, SendPreview } from '../../src/core/service.js';
 import type { HostBridge } from '../../src/mcp/host.js';
 import { createServer } from '../../src/mcp/server.js';
 import { harness, type Harness } from './helpers.js';
@@ -23,7 +23,7 @@ async function sendVia(caps: Record<string, unknown>, elicit: Elicit) {
   const sends: { ref: string; text: string; approval?: string }[] = [];
   const prompts: string[] = [];
   const ops = {
-    previewDirect: async (a: { ref: string; text: string }): Promise<SendPreview> => ({ to: 'Ali +923001234567', where: 'Pharma Traders', text: a.text, approval: 'APPROVAL-1' }),
+    previewDirect: async (a: { ref: string; text: string }): Promise<SendPreview> => ({ to: 'Ali +923001234567', where: 'Pharma Traders', how: 'posted in Pharma Traders', text: a.text, approval: 'APPROVAL-1' }),
     sendDirect: async (a: { ref: string; text: string; approval?: string }): Promise<SendDirectResult> => {
       sends.push(a);
       return { sent: true, to: 'Ali +923001234567', reply_tracking: true };
@@ -55,11 +55,42 @@ async function sendVia(caps: Record<string, unknown>, elicit: Elicit) {
   return { sends, prompts, out: JSON.parse(result?.result?.content[0]?.text ?? '{}') as Record<string, unknown> };
 }
 
+describe('whatsapp_check_number', () => {
+  it('passes the numbers to the host and returns one result per number', async () => {
+    h = harness();
+    const cfg = resolvePaths(h.dir).config;
+    fs.mkdirSync(path.dirname(cfg), { recursive: true });
+    fs.writeFileSync(cfg, 'allow_sending: true\n');
+    const asked: string[][] = [];
+    const ops = {
+      checkNumbers: async (phones: string[]): Promise<NumberCheckResult[]> => {
+        asked.push(phones);
+        return [
+          { phone: '+923001234567', on_whatsapp: true, jid: '923001234567@s.whatsapp.net' },
+          { phone: '+923009999999', on_whatsapp: false, jid: null },
+        ];
+      },
+    };
+    const { handlers } = createServer({ ...h.deps, getHost: () => ({ ops: () => ops }) as unknown as HostBridge });
+    const run = handlers.get('whatsapp_check_number');
+    expect(run).toBeDefined();
+    const r = await run!({ phones: ['03001234567', '+92 300 9999999'] }) as { content: { text: string }[]; isError?: boolean };
+    expect(asked).toEqual([['03001234567', '+92 300 9999999']]);
+    expect(JSON.parse(r.content[0]!.text)).toEqual({ results: [
+      { phone: '+923001234567', on_whatsapp: true, jid: '923001234567@s.whatsapp.net' },
+      { phone: '+923009999999', on_whatsapp: false, jid: null },
+    ] });
+    const tooMany = await run!({ phones: Array.from({ length: 11 }, (_, i) => `0300000000${i}`) }) as { isError?: boolean };
+    expect(tooMany.isError).toBe(true);
+  });
+});
+
 describe('whatsapp_send_direct confirmation', () => {
   it('asks inside Claude and sends with the approval (no OS pop-up) when the user accepts', async () => {
     const r = await sendVia({ elicitation: {} }, { action: 'accept', delayMs: 1500 });
     expect(r.prompts[0]).toContain('Ali +923001234567');
     expect(r.prompts[0]).toContain('Panadol ka rate?');
+    expect(r.prompts[0]).toContain('(posted in Pharma Traders)');
     expect(r.sends).toEqual([{ ref: 'g@g.us/p1', text: 'Panadol ka rate?', approval: 'APPROVAL-1' }]);
     expect(r.out.sent).toBe(true);
   });

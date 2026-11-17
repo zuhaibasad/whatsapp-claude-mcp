@@ -88,12 +88,15 @@ export const EXTRA_WRITE_API_PATTERNS: readonly RegExp[] = [
 /**
  * Each name is allowed only inside the named function in src/daemon/wa/wa-client.ts:
  * - logout in unlink() (approved 2026-10-21, PLAN section 7);
- * - sendMessage in sendDirectText() (approved 2026-11-11: user-confirmed text to a 1-to-1 chat, DECISIONS.md).
+ * - sendMessage in sendDirectText() (approved 2026-11-11: user-confirmed text to a 1-to-1 chat, DECISIONS.md);
+ * - onWhatsApp in checkOnWhatsApp() (approved 2026-11-17: rate-limited "is this number on WhatsApp" lookup for
+ *   whatsapp_check_number, opt-in with allow_sending; a read query, but pinned to one function so it cannot spread).
  */
 export const ALLOWED_EXCEPTION_FILE = 'src/daemon/wa/wa-client.ts';
 export const ALLOWED_EXCEPTION_FUNCTIONS: Readonly<Record<string, string>> = {
   logout: 'unlink',
   sendMessage: 'sendDirectText',
+  onWhatsApp: 'checkOnWhatsApp',
 };
 export const ALLOWED_EXCEPTIONS: readonly string[] = Object.keys(ALLOWED_EXCEPTION_FUNCTIONS);
 

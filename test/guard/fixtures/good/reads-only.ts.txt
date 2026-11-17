@@ -7,7 +7,7 @@ export async function readOnly(jid: string): Promise<unknown[]> {
   sock.ev.on('messages.upsert', () => undefined);
   const meta = await sock.groupMetadata(jid);
   const all = await sock.groupFetchAllParticipating();
-  const known = await sock.onWhatsApp(jid);
+  const known = await sock.profilePictureUrl(jid);
   const status = await sock['fetchStatus'](jid);
   return [meta, all, known, status, DisconnectReason, jidNormalizedUser(jid)];
 }

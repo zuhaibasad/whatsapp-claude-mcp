@@ -30,7 +30,8 @@ function fakeHost() {
     disconnect: async () => state({ step: 'ready_to_link', qrSvg: null }),
     diagnose: async () => ({ version: '0.1.0', dataDir: 'C:\\x', checks: [{ name: 'data_dir', ok: true, detail: 'fine' }] }),
     sendDirect: async (a) => { calls.push(`send:${a.ref}`); return { sent: true, to: 'Ali +923001234567', reply_tracking: true }; },
-    previewDirect: async (a) => ({ to: 'Ali +923001234567', where: 'Pharma Traders', text: a.text, approval: 'APPROVAL' }),
+    previewDirect: async (a) => ({ to: 'Ali +923001234567', where: 'Pharma Traders', how: 'posted in Pharma Traders', text: a.text, approval: 'APPROVAL' }),
+    checkNumbers: async (phones) => phones.map((p) => ({ phone: p, on_whatsapp: false, jid: null })),
   };
   const host: HostBridge = {
     ops: () => ops,

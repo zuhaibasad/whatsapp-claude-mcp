@@ -1,6 +1,6 @@
 // The daemon: lock, open DBs, connect to WhatsApp, ingest, reconnect with backoff, retention.
 import fs from 'node:fs';
-import type { Config, Db, MasterKeyStore, WaClient } from '../core/contracts.js';
+import type { Config, Db, MasterKeyStore, NumberCheck, WaClient } from '../core/contracts.js';
 import type { CollectorState } from '../core/service.js';
 import { createLogger, type Logger } from '../core/logger.js';
 import { resolvePaths, type DataPaths } from '../core/paths.js';
@@ -117,6 +117,8 @@ export interface CollectorHandle {
   reloadConfig(): void;
   /** User-confirmed text to a direct chat (see HolderCore.sendDirect). Rejects unless the collector is live. */
   sendDirectText(jid: string, text: string): Promise<{ id: string | null }>;
+  /** Read-only number lookup (see HolderCore.checkNumbers). Rejects unless the collector is live. */
+  checkOnWhatsApp(phones: string[]): Promise<NumberCheck[]>;
 }
 
 /**
@@ -431,6 +433,10 @@ export function startCollector(opts: CollectorOptions): CollectorHandle {
     sendDirectText: (jid, text) => {
       if (stopped || state !== 'live') return Promise.reject(new Error(`WhatsApp is ${state} right now: try again when it is live`));
       return client.sendDirectText(jid, text);
+    },
+    checkOnWhatsApp: (phones) => {
+      if (stopped || state !== 'live') return Promise.reject(new Error(`WhatsApp is ${state} right now: try again when it is live`));
+      return client.checkOnWhatsApp(phones);
     },
   };
 }

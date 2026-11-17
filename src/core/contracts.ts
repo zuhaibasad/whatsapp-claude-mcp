@@ -256,6 +256,7 @@ export interface WaClientEvents {
 /**
  * The ONLY object the rest of the code sees. Two write-type actions exist, both approved exceptions (docs/DECISIONS.md):
  * unlink() calls logout(); sendDirectText() sends one user-confirmed text to a 1-to-1 chat. Nothing else writes.
+ * checkOnWhatsApp() is a rate-limited read-only lookup (onWhatsApp), also an approved exception.
  */
 export interface WaClient {
   on<E extends keyof WaClientEvents>(event: E, listener: WaClientEvents[E]): void;
@@ -267,6 +268,16 @@ export interface WaClient {
   unlink(): Promise<void>;
   /** Sends plain text to a direct chat (…@s.whatsapp.net or …@lid). Only after the user confirmed on screen. */
   sendDirectText(jid: string, text: string): Promise<{ id: string | null }>;
+  /** Whether each phone number (digits, international) has WhatsApp. Read-only; callers rate-limit it. */
+  checkOnWhatsApp(phones: string[]): Promise<NumberCheck[]>;
+}
+
+export interface NumberCheck {
+  /** Digits only, international form. */
+  phone: string;
+  exists: boolean;
+  /** Phone-number JID when it exists, else null. */
+  jid: string | null;
 }
 
 // ---------- onboarding chat picker (T11) ----------

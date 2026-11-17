@@ -82,12 +82,23 @@ export interface SetupOps {
    * this ref + text. Only the MCP server uses it, after the user accepted a confirmation inside Claude.
    */
   previewDirect(opts: { ref: string; text: string }): Promise<SendPreview>;
+  /** Whether 1 to 10 phone numbers have WhatsApp. Same opt-in as sending, rate-limited. Does not make them sendable. */
+  checkNumbers(phones: string[]): Promise<NumberCheckResult[]>;
+}
+
+export interface NumberCheckResult {
+  /** "+923001234567" */
+  phone: string;
+  on_whatsapp: boolean;
+  jid: string | null;
 }
 
 export interface SendPreview {
   to: string;
   /** Name of the chat where they posted, if known. */
   where: string | null;
+  /** How the user knows them: "existing chat", "saved contact", "member of X", "posted in X". */
+  how: string;
   /** The text that will be sent (trimmed). */
   text: string;
   approval: string;

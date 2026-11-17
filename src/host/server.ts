@@ -190,6 +190,11 @@ export async function startControlServer(
           if (typeof body.ref !== 'string' || typeof body.text !== 'string') throw new HostError(400, 'ref and text must be strings');
           return send(res, 200, await core.previewDirect({ ref: body.ref, text: body.text }));
         }
+        case 'check_numbers': {
+          const phones = body.phones;
+          if (!Array.isArray(phones) || !phones.every((x) => typeof x === 'string')) throw new HostError(400, 'phones must be a list of strings');
+          return send(res, 200, await core.checkNumbers(phones as string[]));
+        }
         case 'wait_for_sync': {
           const ms = typeof body.timeoutMs === 'number' && body.timeoutMs >= 0 ? Math.min(body.timeoutMs, 600_000) : 30_000;
           return send(res, 200, await core.waitForSync(ms));

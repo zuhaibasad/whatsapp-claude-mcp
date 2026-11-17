@@ -50,6 +50,15 @@ describe('tool surface', () => {
     const tools = await listTools(h.deps, {});
     expect(tools.map((t) => t.name)).toContain('whatsapp_send_direct');
     expect(tools.find((t) => t.name === 'whatsapp_send_direct')?.annotations?.readOnlyHint).toBe(false);
+    expect(tools.find((t) => t.name === 'whatsapp_send_direct')?.description).toMatch(/chat_id\/message_id/);
+    expect(tools.map((t) => t.name)).toContain('whatsapp_check_number');
+  });
+
+  it('hides whatsapp_check_number (and send) while allow_sending is off', async () => {
+    h = harness();
+    const names = (await listTools(h.deps, {})).map((t) => t.name);
+    expect(names).not.toContain('whatsapp_check_number');
+    expect(names).not.toContain('whatsapp_send_direct');
   });
 
   it('adds only the app-only setup_* tools for a client with UI support', async () => {
